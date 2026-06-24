@@ -46,7 +46,6 @@ def build_vidstrochka_conversation() -> ConversationHandler:
             State.RESULT: [CallbackQueryHandler(handlers.on_result)],
         },
         fallbacks=[
-            CommandHandler("cancel", handlers.cancel),
             CommandHandler("vidstrochka", handlers.begin_vidstrochka),
         ],
     )
