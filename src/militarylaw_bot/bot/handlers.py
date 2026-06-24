@@ -18,6 +18,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from militarylaw_bot.bot import keyboards, texts
 from militarylaw_bot.bot.callback_data import (
     GO_BACK,
+    START_NEW,
     AgeAtSigning,
     ContractTerm,
     ContractTerm768,
@@ -56,17 +57,39 @@ type _RenderFn = Callable[[Target, Session], Awaitable[None]]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    # Send WELCOME and save its ID
+    # Clear entire chat history including saved results
+    try:
+        # Delete a range of message IDs (go back 100 messages from current)
+        current_id = update.message.message_id
+        for msg_id in range(max(1, current_id - 100), current_id):
+            try:
+                await update.message.get_bot().delete_message(
+                    chat_id=update.message.chat_id, message_id=msg_id
+                )
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Clear all saved results and session
+    reset_session(context)
+    # Send fresh WELCOME message
     welcome_msg = await update.message.reply_text(texts.WELCOME)
     set_welcome_message_id(context, welcome_msg.message_id)
 
 
 async def begin_vidstrochka(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
-    # Delete all messages except WELCOME
+    # Save existing saved results before resetting
+    old_session = get_session(context)
+    saved_ids = old_session.saved_message_ids.copy()
+
+    # Delete all messages except WELCOME and saved results
     await _delete_messages_except_welcome(update.message, context)
 
     reset_session(context)
     session = get_session(context)
+    # Restore saved results to new session
+    session.saved_message_ids = saved_ids
     await render_gate_2022(update.message, session)
     return State.GATE_2022
 
@@ -116,7 +139,10 @@ async def render_await_service_before_2022_years(target: Target, session: Sessio
 
 async def render_result(target: Target, session: Session) -> None:
     await _send_final(
-        target, texts.with_closing_note(_format_result(session)), keyboards.back_only(), session
+        target,
+        texts.with_closing_note(_format_result(session)),
+        keyboards.result_actions(),
+        session,
     )
 
 
@@ -146,19 +172,32 @@ async def on_gate_2022(update: Update, context: ContextTypes.DEFAULT_TYPE) -> St
     if (back_state := await _handle_back(query, session, State.GATE_2022)) is not None:
         return back_state
 
+    if query.data == START_NEW:
+        # Remove buttons from NO_2022_CONTRACT, save it, start new session
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        # Save message ID so it won't be deleted by /vidstrochka
+        session.saved_message_ids.append(query.message.message_id)
+        saved_ids = session.saved_message_ids.copy()
+        reset_session(context)
+        session = get_session(context)
+        # Restore saved messages list to new session
+        session.saved_message_ids = saved_ids
+        await render_gate_2022(query.message, session)
+        return State.GATE_2022
+
     if query.data == Gate2022.YES:
         session.push(State.GATE_2022)
-        # Show NO_2022_CONTRACT text with contract-type buttons and back
-        keyboard = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("1️⃣", callback_data=ContractType.KMU_768)],
-                [InlineKeyboardButton("2️⃣", callback_data=ContractType.KMU_1538)],
-                [InlineKeyboardButton("3️⃣", callback_data=ContractType.OTHER)],
-                [InlineKeyboardButton(keyboards.BACK_BUTTON_LABEL, callback_data=GO_BACK)],
-            ]
+        # Show NO_2022_CONTRACT text with save and back buttons
+        keyboard = keyboards.message_with_save()
+        await query.edit_message_text(
+            texts.with_closing_note(texts.NO_2022_CONTRACT),
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
         )
-        await query.edit_message_text(texts.NO_2022_CONTRACT, reply_markup=keyboard)
-        return State.CONTRACT_TYPE
+        return State.GATE_2022
 
     session.push(State.GATE_2022)
     await render_contract_type(query, session)
@@ -358,20 +397,29 @@ async def on_service_before_2022_years(update: Update, context: ContextTypes.DEF
 
 
 async def on_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
-    """Handle back-button on result screen."""
+    """Handle back-button or start-new on result screen."""
     query = update.callback_query
+    await query.answer()
     session = get_session(context)
+
+    if query.data == START_NEW:
+        # Remove buttons from result message (keep text), save it, start new session
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass  # Message may have already been edited
+        # Save result message ID so it won't be deleted by /vidstrochka
+        session.saved_message_ids.append(query.message.message_id)
+        saved_ids = session.saved_message_ids.copy()
+        reset_session(context)
+        session = get_session(context)
+        # Restore saved messages list to new session
+        session.saved_message_ids = saved_ids
+        await render_gate_2022(query.message, session)
+        return State.GATE_2022
 
     back_state = await _handle_back(query, session, State.RESULT)
     return back_state if back_state is not None else State.RESULT
-
-
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
-    # Delete all messages except WELCOME
-    await _delete_messages_except_welcome(update.message, context)
-    reset_session(context)
-    await update.message.reply_text(texts.CANCELLED)
-    return ConversationHandler.END
 
 
 # --- Shared plumbing -------------------------------------------------------
@@ -492,21 +540,24 @@ async def _delete_prev_messages(message: Message, session: Session) -> None:
 async def _delete_messages_except_welcome(
     message: Message, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Delete all messages except WELCOME, keeping only last 2 messages (WELCOME + current)."""
+    """Delete all messages except WELCOME and saved results."""
     try:
         current_id = message.message_id
         welcome_id = get_welcome_message_id(context)
+        session = get_session(context)
+        saved_ids = set(session.saved_message_ids)
 
-        # Delete everything between welcome and current message
+        # Delete everything between welcome and current message, except saved
         if welcome_id is not None:
-            # Delete messages from welcome+1 to current-1
+            # Delete messages from welcome+1 to current-1, skip saved ones
             for msg_id in range(welcome_id + 1, current_id):
-                try:
-                    await message.get_bot().delete_message(
-                        chat_id=message.chat_id, message_id=msg_id
-                    )
-                except Exception:
-                    pass
+                if msg_id not in saved_ids:
+                    try:
+                        await message.get_bot().delete_message(
+                            chat_id=message.chat_id, message_id=msg_id
+                        )
+                    except Exception:
+                        pass
     except Exception:
         pass
 
