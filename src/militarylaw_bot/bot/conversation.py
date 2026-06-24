@@ -31,9 +31,18 @@ def build_vidstrochka_conversation() -> ConversationHandler:
             State.CONTRACT_TERM_1538: [CallbackQueryHandler(handlers.on_contract_term_1538)],
             State.CONTRACT_TERM_OTHER: [CallbackQueryHandler(handlers.on_contract_term_other)],
             State.DISCHARGED_BEFORE_768: [CallbackQueryHandler(handlers.on_discharged_before_768)],
-            State.AWAIT_COMBAT_DATES: [MessageHandler(_TEXT_INPUT, handlers.on_combat_dates)],
-            State.AWAIT_SIGNING_DATE: [MessageHandler(_TEXT_INPUT, handlers.on_signing_date)],
-            State.AWAIT_SERVICE_DATES: [MessageHandler(_TEXT_INPUT, handlers.on_service_dates)],
+            State.AWAIT_COMBAT_UNITS: [
+                CallbackQueryHandler(handlers.on_combat_units),
+                MessageHandler(_TEXT_INPUT, handlers.on_combat_units),
+            ],
+            State.AWAIT_SERVICE_SINCE_2022_YEARS: [
+                CallbackQueryHandler(handlers.on_service_since_2022_years),
+                MessageHandler(_TEXT_INPUT, handlers.on_service_since_2022_years),
+            ],
+            State.AWAIT_SERVICE_BEFORE_2022_YEARS: [
+                CallbackQueryHandler(handlers.on_service_before_2022_years),
+                MessageHandler(_TEXT_INPUT, handlers.on_service_before_2022_years),
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", handlers.cancel),
