@@ -8,11 +8,13 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+GO_BACK = "go_back"
+"""Shared callback data for the "↩ Назад" button, present on every question."""
+
 
 class Gate2022(StrEnum):
     YES = "gate_2022_yes"
     NO = "gate_2022_no"
-    BACK_TO_CONTRACT = "gate_2022_back_to_contract"
 
 
 class ContractType(StrEnum):
