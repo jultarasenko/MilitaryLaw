@@ -32,7 +32,7 @@ def back_only() -> InlineKeyboardMarkup:
 
 def gate_2022() -> InlineKeyboardMarkup:
     # First question of the flow — nothing to go back to.
-    return _keyboard([("Так", Gate2022.YES), ("Ні", Gate2022.NO)], with_back=True)
+    return _keyboard([("Так", Gate2022.YES), ("Ні", Gate2022.NO)], with_back=False)
 
 
 def contract_type() -> InlineKeyboardMarkup:
