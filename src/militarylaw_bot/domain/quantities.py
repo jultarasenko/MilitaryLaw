@@ -26,4 +26,9 @@ def parse_count(text: str) -> int:
     if value < 0:
         raise QuantityParseError("Кількість не може бути від'ємною.")
 
+    # Sanity check: combat periods max ~50 (5+ years of daily combat is unrealistic)
+    # service years max 50+ is possible but warn anyway
+    if value > 100:
+        raise QuantityParseError("Занадто велике число. Максимум 100.")
+
     return value
