@@ -43,6 +43,7 @@ def build_vidstrochka_conversation() -> ConversationHandler:
                 CallbackQueryHandler(handlers.on_service_before_2022_years),
                 MessageHandler(_TEXT_INPUT, handlers.on_service_before_2022_years),
             ],
+            State.RESULT: [CallbackQueryHandler(handlers.on_result)],
         },
         fallbacks=[
             CommandHandler("cancel", handlers.cancel),
