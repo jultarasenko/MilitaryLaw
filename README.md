@@ -10,7 +10,7 @@ stateful bot.
 
 - **Python 3.13**, fully type-hinted
 - [`python-telegram-bot`](https://github.com/python-telegram-bot/python-telegram-bot) (async, `ConversationHandler`-based dialogue)
-- **pytest** for unit tests of the legal/date logic
+- **pytest** for unit tests of the legal logic
 - **ruff** for linting and formatting
 - **Docker** / **docker-compose** for deployment, with a named volume for persistent conversation state
 
@@ -25,7 +25,7 @@ business-rule details.
 src/militarylaw_bot/
 ├── domain/              # Framework-free business logic
 │   ├── deferral.py      #   decision-tree rules: which terms apply and how they're computed
-│   ├── dates.py         #   parsing & validating user-supplied date ranges
+│   ├── quantities.py    #   parsing & validating user-supplied unit counts
 │   └── formatting.py    #   renders a result as user-facing text
 ├── bot/                 # Telegram adapter layer
 │   ├── app.py           #   builds and runs the Application
@@ -40,10 +40,10 @@ src/militarylaw_bot/
 ```
 
 **Why this split:** the decision tree (which deferral components apply, and
-how their durations are computed from dates) is the part of this project
-that is legally load-bearing and most likely to need a careful review or
-update. Isolating it in `domain/`, with no `telegram` import anywhere in
-that package, means:
+how their durations are computed) is the part of this project that is
+legally load-bearing and most likely to need a careful review or update.
+Isolating it in `domain/`, with no `telegram` import anywhere in that
+package, means:
 
 - it can be unit tested directly (see `tests/`) without spinning up a bot
   or mocking Telegram's API,
@@ -63,12 +63,12 @@ The bot encodes this flow (see `domain/deferral.py` for the implementation):
    general-grounds contract signed after 24.02.2022?
 3. Depending on the answer, the bot asks follow-up questions (contract term,
    age at signing, discharge timing) and, where the legal formula requires
-   it, asks for the user's contract-signing date, combat-participation
-   period(s), and/or pre-24.02.2022 service period(s).
+   it, asks for unit counts rather than exact dates: how many 30-day
+   combat-participation periods, how many full years of service since
+   24.02.2022, and/or how many full years of continuous service before it.
 4. The final deferral term is a sum of components — some fixed, some
-   computed as months-per-30-days of combat participation, months-per-year
-   of service from 24.02.2022 to the contract's signing date, or
-   months-per-year of continuous service before 24.02.2022.
+   computed as months-per-combat-period, or months-per-year of service
+   (since or before 24.02.2022).
 
 ## Running locally
 
@@ -91,7 +91,7 @@ in-progress conversations survive a container restart.
 ## Tests
 
 ```bash
-pytest          # unit tests for domain/dates.py and domain/deferral.py
+pytest          # unit tests for domain/quantities.py and domain/deferral.py
 ruff check .    # lint
 ruff format .   # format
 ```
