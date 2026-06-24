@@ -15,6 +15,7 @@ from militarylaw_bot.bot.states import State
 from militarylaw_bot.domain.deferral import DeferralResult
 
 _STORAGE_KEY = "session"
+_WELCOME_MSG_KEY = "welcome_message_id"
 
 
 @dataclass
@@ -23,6 +24,8 @@ class Session:
     combat_units: int = 0
     service_since_2022_years: int = 0
     service_before_2022_years: int = 0
+    last_bot_message_id: int | None = None
+    prev_bot_message_ids: list[int] = field(default_factory=list, repr=False)
     history: list[tuple[State, Session]] = field(default_factory=list, repr=False)
 
     def snapshot(self) -> Session:
@@ -45,6 +48,7 @@ class Session:
         self.combat_units = snapshot.combat_units
         self.service_since_2022_years = snapshot.service_since_2022_years
         self.service_before_2022_years = snapshot.service_before_2022_years
+        self.last_bot_message_id = snapshot.last_bot_message_id
 
 
 def get_session(context: ContextTypes.DEFAULT_TYPE) -> Session:
@@ -52,12 +56,40 @@ def get_session(context: ContextTypes.DEFAULT_TYPE) -> Session:
     if session is None:
         session = Session()
         context.user_data[_STORAGE_KEY] = session
-    elif not hasattr(session, "history"):
-        # Session objects persisted before the "Назад" feature was added
-        # don't have this field yet — back-fill it rather than erroring.
-        session.history = []
+    else:
+        # Migrate old sessions (before unit-count model)
+        if not hasattr(session, "history"):
+            session.history = []
+        if not hasattr(session, "combat_units"):
+            session.combat_units = 0
+        if not hasattr(session, "service_since_2022_years"):
+            session.service_since_2022_years = 0
+        if not hasattr(session, "service_before_2022_years"):
+            session.service_before_2022_years = 0
+        if not hasattr(session, "last_bot_message_id"):
+            session.last_bot_message_id = None
+        if not hasattr(session, "prev_bot_message_ids"):
+            session.prev_bot_message_ids = []
     return session
 
 
 def reset_session(context: ContextTypes.DEFAULT_TYPE) -> None:
-    context.user_data[_STORAGE_KEY] = Session()
+    # Reset session but preserve WELCOME message ID
+    welcome_id = context.user_data.get(_WELCOME_MSG_KEY)
+    session = Session()
+    # Explicitly clear history and message IDs to prevent unbounded growth
+    session.history.clear()
+    session.prev_bot_message_ids.clear()
+    context.user_data[_STORAGE_KEY] = session
+    if welcome_id is not None:
+        context.user_data[_WELCOME_MSG_KEY] = welcome_id
+
+
+def get_welcome_message_id(context: ContextTypes.DEFAULT_TYPE) -> int | None:
+    """Get the stored WELCOME message ID."""
+    return context.user_data.get(_WELCOME_MSG_KEY)
+
+
+def set_welcome_message_id(context: ContextTypes.DEFAULT_TYPE, message_id: int) -> None:
+    """Store the WELCOME message ID."""
+    context.user_data[_WELCOME_MSG_KEY] = message_id
