@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
-from telegram import CallbackQuery, InlineKeyboardMarkup, Message, Update
+from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 
@@ -25,7 +25,13 @@ from militarylaw_bot.bot.callback_data import (
     DischargedBefore768,
     Gate2022,
 )
-from militarylaw_bot.bot.session import Session, get_session, reset_session
+from militarylaw_bot.bot.session import (
+    Session,
+    get_session,
+    reset_session,
+    get_welcome_message_id,
+    set_welcome_message_id,
+)
 from militarylaw_bot.bot.states import State
 from militarylaw_bot.domain.deferral import (
     KMU_768_BY_CONTRACT_TERM,
@@ -42,61 +48,76 @@ _KMU_768_TERM_BY_CALLBACK = {
     ContractTerm768.MONTHS_24: "24_months",
 }
 
+# Message history limit - prevent unbounded growth in long conversations
+_MESSAGE_ID_HISTORY_LIMIT = 10
+
 type Target = CallbackQuery | Message
 type _RenderFn = Callable[[Target, Session], Awaitable[None]]
 
 
-async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text(texts.WELCOME)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Send WELCOME and save its ID
+    welcome_msg = await update.message.reply_text(texts.WELCOME)
+    set_welcome_message_id(context, welcome_msg.message_id)
 
 
 async def begin_vidstrochka(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
+    # Delete all messages except WELCOME
+    await _delete_messages_except_welcome(update.message, context)
+
     reset_session(context)
-    await render_gate_2022(update.message, get_session(context))
+    session = get_session(context)
+    await render_gate_2022(update.message, session)
     return State.GATE_2022
 
 
 # --- Render functions: show a question, never read the answer. ----------
 
 
-async def render_gate_2022(target: Target, _session: Session) -> None:
-    await _send(target, texts.ASK_GATE_2022, keyboards.gate_2022())
+async def render_gate_2022(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_GATE_2022, keyboards.gate_2022(), session)
 
 
-async def render_contract_type(target: Target, _session: Session) -> None:
-    await _send(target, texts.ASK_CONTRACT_TYPE, keyboards.contract_type())
+async def render_contract_type(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_CONTRACT_TYPE, keyboards.contract_type(), session)
 
 
-async def render_contract_term_768(target: Target, _session: Session) -> None:
-    await _send(target, texts.ASK_CONTRACT_TERM, keyboards.contract_term_768())
+async def render_contract_term_768(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_CONTRACT_TERM, keyboards.contract_term_768(), session)
 
 
-async def render_age_at_signing(target: Target, _session: Session) -> None:
-    await _send(target, texts.ASK_AGE_AT_SIGNING, keyboards.age_at_signing())
+async def render_age_at_signing(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_AGE_AT_SIGNING, keyboards.age_at_signing(), session)
 
 
-async def render_contract_term_1538(target: Target, _session: Session) -> None:
+async def render_contract_term_1538(target: Target, session: Session) -> None:
     await _send(target, texts.ASK_CONTRACT_TERM, keyboards.contract_term())
 
 
-async def render_contract_term_other(target: Target, _session: Session) -> None:
+async def render_contract_term_other(target: Target, session: Session) -> None:
     await _send(target, texts.ASK_CONTRACT_TERM, keyboards.contract_term())
 
 
-async def render_discharged_before_768(target: Target, _session: Session) -> None:
-    await _send(target, texts.ASK_DISCHARGED_BEFORE_768, keyboards.discharged_before_768())
+async def render_discharged_before_768(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_DISCHARGED_BEFORE_768, keyboards.discharged_before_768(), session)
 
 
-async def render_await_combat_units(target: Target, _session: Session) -> None:
-    await _send(target, texts.COMBAT_UNITS_PROMPT, keyboards.back_only())
+async def render_await_combat_units(target: Target, session: Session) -> None:
+    await _send(target, texts.COMBAT_UNITS_PROMPT, keyboards.back_only(), session)
 
 
-async def render_await_service_since_2022_years(target: Target, _session: Session) -> None:
-    await _send(target, texts.SERVICE_SINCE_2022_PROMPT, keyboards.back_only())
+async def render_await_service_since_2022_years(target: Target, session: Session) -> None:
+    await _send(target, texts.SERVICE_SINCE_2022_PROMPT, keyboards.back_only(), session)
 
 
-async def render_await_service_before_2022_years(target: Target, _session: Session) -> None:
-    await _send(target, texts.SERVICE_BEFORE_2022_PROMPT, keyboards.back_only())
+async def render_await_service_before_2022_years(target: Target, session: Session) -> None:
+    await _send(target, texts.SERVICE_BEFORE_2022_PROMPT, keyboards.back_only(), session)
+
+
+async def render_result(target: Target, session: Session) -> None:
+    await _send_final(
+        target, texts.with_closing_note(_format_result(session)), keyboards.back_only(), session
+    )
 
 
 _RENDER_BY_STATE: dict[State, _RenderFn] = {
@@ -110,6 +131,7 @@ _RENDER_BY_STATE: dict[State, _RenderFn] = {
     State.AWAIT_COMBAT_UNITS: render_await_combat_units,
     State.AWAIT_SERVICE_SINCE_2022_YEARS: render_await_service_since_2022_years,
     State.AWAIT_SERVICE_BEFORE_2022_YEARS: render_await_service_before_2022_years,
+    State.RESULT: render_result,
 }
 
 
@@ -124,9 +146,19 @@ async def on_gate_2022(update: Update, context: ContextTypes.DEFAULT_TYPE) -> St
     if (back_state := await _handle_back(query, session, State.GATE_2022)) is not None:
         return back_state
 
-    if query.data == Gate2022.NO:
-        await query.edit_message_text(texts.NO_2022_CONTRACT, reply_markup=keyboards.back_only())
-        return State.GATE_2022
+    if query.data == Gate2022.YES:
+        session.push(State.GATE_2022)
+        # Show NO_2022_CONTRACT text with contract-type buttons and back
+        keyboard = InlineKeyboardMarkup(
+            [
+                [InlineKeyboardButton("1️⃣", callback_data=ContractType.KMU_768)],
+                [InlineKeyboardButton("2️⃣", callback_data=ContractType.KMU_1538)],
+                [InlineKeyboardButton("3️⃣", callback_data=ContractType.OTHER)],
+                [InlineKeyboardButton(keyboards.BACK_BUTTON_LABEL, callback_data=GO_BACK)],
+            ]
+        )
+        await query.edit_message_text(texts.NO_2022_CONTRACT, reply_markup=keyboard)
+        return State.CONTRACT_TYPE
 
     session.push(State.GATE_2022)
     await render_contract_type(query, session)
@@ -199,8 +231,14 @@ async def on_contract_term_1538(update: Update, context: ContextTypes.DEFAULT_TY
     session.push(State.CONTRACT_TERM_1538)
 
     if query.data == ContractTerm.ONE_YEAR:
-        await _send_final(query, texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE))
-        return ConversationHandler.END
+        session.pending_result = DeferralResult(())
+        session.push(State.CONTRACT_TERM_1538)
+        await query.edit_message_text(
+            texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE),
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboards.back_only(),
+        )
+        return State.RESULT
 
     await render_discharged_before_768(query, session)
     return State.DISCHARGED_BEFORE_768
@@ -217,8 +255,14 @@ async def on_contract_term_other(update: Update, context: ContextTypes.DEFAULT_T
     session.push(State.CONTRACT_TERM_OTHER)
 
     if query.data == ContractTerm.ONE_YEAR:
-        await _send_final(query, texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE))
-        return ConversationHandler.END
+        session.pending_result = DeferralResult(())
+        session.push(State.CONTRACT_TERM_1538)
+        await query.edit_message_text(
+            texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE),
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboards.back_only(),
+        )
+        return State.RESULT
 
     await render_discharged_before_768(query, session)
     return State.DISCHARGED_BEFORE_768
@@ -235,8 +279,14 @@ async def on_discharged_before_768(update: Update, context: ContextTypes.DEFAULT
     session.push(State.DISCHARGED_BEFORE_768)
 
     if query.data == DischargedBefore768.YES:
-        await _send_final(query, texts.with_closing_note(texts.NO_DEFERRAL))
-        return ConversationHandler.END
+        session.pending_result = DeferralResult(())
+        session.push(State.DISCHARGED_BEFORE_768)
+        await query.edit_message_text(
+            texts.with_closing_note(texts.NO_DEFERRAL),
+            parse_mode=ParseMode.HTML,
+            reply_markup=keyboards.back_only(),
+        )
+        return State.RESULT
 
     six_months_plus_combat = DeferralResult((SIX_MONTHS_PLUS_COMBAT,))
     return await _advance_to_units_or_finish(query, session, six_months_plus_combat)
@@ -257,6 +307,8 @@ async def on_combat_units(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text(retry_text, reply_markup=keyboards.back_only())
         return State.AWAIT_COMBAT_UNITS
 
+    # Delete the message with user's input (old question is already handled by reply_text)
+    await _delete_prev_messages(update.message, session)
     session.push(State.AWAIT_COMBAT_UNITS)
     return await _advance_past(State.AWAIT_COMBAT_UNITS, update.message, session)
 
@@ -278,6 +330,7 @@ async def on_service_since_2022_years(update: Update, context: ContextTypes.DEFA
         await update.message.reply_text(retry_text, reply_markup=keyboards.back_only())
         return State.AWAIT_SERVICE_SINCE_2022_YEARS
 
+    await _delete_prev_messages(update.message, session)
     session.push(State.AWAIT_SERVICE_SINCE_2022_YEARS)
     return await _advance_past(State.AWAIT_SERVICE_SINCE_2022_YEARS, update.message, session)
 
@@ -299,11 +352,23 @@ async def on_service_before_2022_years(update: Update, context: ContextTypes.DEF
         await update.message.reply_text(retry_text, reply_markup=keyboards.back_only())
         return State.AWAIT_SERVICE_BEFORE_2022_YEARS
 
+    await _delete_prev_messages(update.message, session)
     session.push(State.AWAIT_SERVICE_BEFORE_2022_YEARS)
     return await _advance_past(State.AWAIT_SERVICE_BEFORE_2022_YEARS, update.message, session)
 
 
+async def on_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
+    """Handle back-button on result screen."""
+    query = update.callback_query
+    session = get_session(context)
+
+    back_state = await _handle_back(query, session, State.RESULT)
+    return back_state if back_state is not None else State.RESULT
+
+
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
+    # Delete all messages except WELCOME
+    await _delete_messages_except_welcome(update.message, context)
     reset_session(context)
     await update.message.reply_text(texts.CANCELLED)
     return ConversationHandler.END
@@ -345,18 +410,24 @@ async def _advance_to_units_or_finish(
 
 async def _advance_past(completed_state: State | None, target: Target, session: Session) -> State:
     """Ask the next still-needed unit-count question after `completed_state`, or finish."""
+    if session.pending_result is None:
+        # Should never happen — pending_result is set before calling _advance_past
+        await target.reply_text("⚠️ Внутрішня помилка. Будь ласка, почніть спочатку.")
+        return ConversationHandler.END
+
     remaining = _UNIT_STEPS
     if completed_state is not None:
-        index = next(i for i, (state, _, _) in enumerate(_UNIT_STEPS) if state is completed_state)
-        remaining = _UNIT_STEPS[index + 1 :]
+        matching = [i for i, (state, _, _) in enumerate(_UNIT_STEPS) if state is completed_state]
+        if matching:
+            remaining = _UNIT_STEPS[matching[0] + 1 :]
 
     for state, render, requires in remaining:
         if requires(session.pending_result):
             await render(target, session)
             return state
 
-    await _send_final(target, texts.with_closing_note(_format_result(session)))
-    return ConversationHandler.END
+    await render_result(target, session)
+    return State.RESULT
 
 
 async def _handle_back(
@@ -383,23 +454,107 @@ async def _handle_back(
 
     state, snapshot = previous
     session.restore(snapshot)
+    # Delete any old bot messages to prevent duplicates
+    if (
+        session.last_bot_message_id is not None
+        and session.last_bot_message_id != query.message.message_id
+    ):
+        try:
+            await query.get_bot().delete_message(
+                chat_id=query.message.chat_id, message_id=session.last_bot_message_id
+            )
+        except Exception:
+            pass
     await _RENDER_BY_STATE[state](query, session)
     return state
 
 
-async def _send(target: Target, text: str, keyboard: InlineKeyboardMarkup | None = None) -> None:
+async def _safe_delete_message(chat_id: int, message_id: int, bot_instance) -> bool:
+    """Safely delete a message, returning True if successful."""
+    try:
+        await bot_instance.delete_message(chat_id=chat_id, message_id=message_id)
+        return True
+    except Exception:
+        return False
+
+
+async def _delete_prev_messages(message: Message, session: Session) -> None:
+    """Delete both bot's message (with question) and user's message (with answer)."""
+    # Delete user's message (the one they just sent)
+    await _safe_delete_message(message.chat_id, message.message_id, message.get_bot())
+
+    # Delete bot's previous message (the question)
+    if session.last_bot_message_id is not None:
+        await _safe_delete_message(message.chat_id, session.last_bot_message_id, message.get_bot())
+        session.last_bot_message_id = None
+
+
+async def _delete_messages_except_welcome(
+    message: Message, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Delete all messages except WELCOME, keeping only last 2 messages (WELCOME + current)."""
+    try:
+        current_id = message.message_id
+        welcome_id = get_welcome_message_id(context)
+
+        # Delete everything between welcome and current message
+        if welcome_id is not None:
+            # Delete messages from welcome+1 to current-1
+            for msg_id in range(welcome_id + 1, current_id):
+                try:
+                    await message.get_bot().delete_message(
+                        chat_id=message.chat_id, message_id=msg_id
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+async def _send(
+    target: Target,
+    text: str,
+    keyboard: InlineKeyboardMarkup | None = None,
+    session: Session | None = None,
+) -> None:
     if isinstance(target, CallbackQuery):
         await target.edit_message_text(text, reply_markup=keyboard)
+        # Keep track of previous message IDs for cleanup
+        if session is not None and target.message.message_id != session.last_bot_message_id:
+            if session.last_bot_message_id is not None:
+                session.prev_bot_message_ids.append(session.last_bot_message_id)
+            session.last_bot_message_id = target.message.message_id
+            # Delete old messages (keep only current and one previous)
+            while len(session.prev_bot_message_ids) > _MESSAGE_ID_HISTORY_LIMIT:
+                old_id = session.prev_bot_message_ids.pop(0)
+                await _safe_delete_message(target.message.chat_id, old_id, target.get_bot())
     else:
-        await target.reply_text(text, reply_markup=keyboard)
+        msg = await target.reply_text(text, reply_markup=keyboard)
+        # Save the bot's message ID for later deletion
+        if session is not None:
+            if session.last_bot_message_id is not None:
+                session.prev_bot_message_ids.append(session.last_bot_message_id)
+            session.last_bot_message_id = msg.message_id
+            # Delete old messages (keep only current and one previous)
+            while len(session.prev_bot_message_ids) > _MESSAGE_ID_HISTORY_LIMIT:
+                old_id = session.prev_bot_message_ids.pop(0)
+                await _safe_delete_message(target.chat_id, old_id, target.get_bot())
 
 
-async def _send_final(target: Target, text: str) -> None:
+async def _send_final(
+    target: Target,
+    text: str,
+    keyboard: InlineKeyboardMarkup | None = None,
+    session: Session | None = None,
+) -> None:
     """Send a closing message — these contain `texts.CLOSING_NOTE`'s HTML links."""
     if isinstance(target, CallbackQuery):
-        await target.edit_message_text(text, parse_mode=ParseMode.HTML)
+        await target.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
     else:
-        await target.reply_text(text, parse_mode=ParseMode.HTML)
+        msg = await target.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+        # Save the bot's message ID for later deletion
+        if session is not None:
+            session.last_bot_message_id = msg.message_id
 
 
 def _format_result(session: Session) -> str:
