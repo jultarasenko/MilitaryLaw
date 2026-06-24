@@ -5,6 +5,7 @@ from __future__ import annotations
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from militarylaw_bot.bot.callback_data import (
+    GO_BACK,
     AgeAtSigning,
     ContractTerm,
     ContractTerm768,
@@ -13,27 +14,33 @@ from militarylaw_bot.bot.callback_data import (
     Gate2022,
 )
 
+BACK_BUTTON_LABEL = "↩ Назад"
 
-def _keyboard(buttons: list[tuple[str, str]]) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons]
-    )
+
+def _keyboard(buttons: list[tuple[str, str]], *, with_back: bool = True) -> InlineKeyboardMarkup:
+    """buttons: each item is (label, callback_data)."""
+    rows = [[InlineKeyboardButton(label, callback_data=data)] for label, data in buttons]
+    if with_back:
+        rows.append([InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)])
+    return InlineKeyboardMarkup(rows)
+
+
+def back_only() -> InlineKeyboardMarkup:
+    """A lone "Назад" button, for text-input steps (date prompts)."""
+    return InlineKeyboardMarkup([[InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)]])
 
 
 def gate_2022() -> InlineKeyboardMarkup:
-    return _keyboard([("Так", Gate2022.YES), ("Ні", Gate2022.NO)])
-
-
-def back_to_contract_type() -> InlineKeyboardMarkup:
-    return _keyboard([("Вибрати контракт", Gate2022.BACK_TO_CONTRACT)])
+    # First question of the flow — nothing to go back to.
+    return _keyboard([("Так", Gate2022.YES), ("Ні", Gate2022.NO)], with_back=True)
 
 
 def contract_type() -> InlineKeyboardMarkup:
     return _keyboard(
         [
-            ("Згідно Постанови КМУ №768 від 12.06.2026 р.", ContractType.KMU_768),
-            ("Згідно Постанови КМУ №1538 від 11.02.2025 р.", ContractType.KMU_1538),
-            ("Інший (на загальних підставах, укладений після 24.02.2022 р.)", ContractType.OTHER),
+            ("1️⃣", ContractType.KMU_768),
+            ("2️⃣", ContractType.KMU_1538),
+            ("3️⃣", ContractType.OTHER),
         ]
     )
 
