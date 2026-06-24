@@ -6,6 +6,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from militarylaw_bot.bot.callback_data import (
     GO_BACK,
+    START_NEW,
     AgeAtSigning,
     ContractTerm,
     ContractTerm768,
@@ -32,7 +33,13 @@ def back_only() -> InlineKeyboardMarkup:
 
 def gate_2022() -> InlineKeyboardMarkup:
     # First question of the flow — nothing to go back to.
-    return _keyboard([("Так", Gate2022.YES), ("Ні", Gate2022.NO)], with_back=False)
+    return _keyboard(
+        [
+            ("Так, до 24.02.2022 р.", Gate2022.YES),
+            ("Ні, після 24.02.2022 р.", Gate2022.NO),
+        ],
+        with_back=False,
+    )
 
 
 def contract_type() -> InlineKeyboardMarkup:
@@ -77,7 +84,27 @@ def age_at_signing() -> InlineKeyboardMarkup:
 def discharged_before_768() -> InlineKeyboardMarkup:
     return _keyboard(
         [
-            ("Ні", DischargedBefore768.NO),
-            ("Так", DischargedBefore768.YES),
+            ("Так, до 16.06.2026 р.", DischargedBefore768.YES),
+            ("Ні, після 16.06.2026 р.", DischargedBefore768.NO),
+        ]
+    )
+
+
+def result_actions() -> InlineKeyboardMarkup:
+    """Buttons for final result: back and start new calculation."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("💾 Зберегти й почати новий", callback_data=START_NEW)],
+            [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
+        ]
+    )
+
+
+def message_with_save() -> InlineKeyboardMarkup:
+    """Buttons for informational messages (NO_2022_CONTRACT): save and go back."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("💾 Зберегти й почати новий", callback_data=START_NEW)],
+            [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
         ]
     )
