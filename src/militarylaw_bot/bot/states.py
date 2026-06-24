@@ -16,3 +16,4 @@ class State(IntEnum):
     AWAIT_COMBAT_UNITS = auto()
     AWAIT_SERVICE_SINCE_2022_YEARS = auto()
     AWAIT_SERVICE_BEFORE_2022_YEARS = auto()
+    RESULT = auto()
