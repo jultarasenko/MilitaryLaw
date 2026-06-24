@@ -67,35 +67,35 @@ class DeferralComponent:
 
 # Component A — slide row А: flat 6 months, no user input required.
 FIXED_BASE = DeferralComponent(
-    label="фіксована частина відстрочки",
+    label="фіксованої частини відстрочки",
     basis=DurationBasis.FIXED,
     fixed_months=6,
 )
 
 # Component B — slide row Б: 3 months per 30-day period of direct combat participation.
 COMBAT_3_PER_30_DAYS = DeferralComponent(
-    label="за кожен 30-денний період безпосередньої участі у бойових діях, по 3 місяці",
+    label="по 3 місяці за кожен 30-денний період безпосередньої участі у бойових діях",
     basis=DurationBasis.COMBAT_PARTICIPATION,
     months_per_unit=3,
 )
 
 # Component C — slide row В: 6 months per full year of service from 24.02.2022 onward.
 SERVICE_SINCE_2022_6_PER_YEAR = DeferralComponent(
-    label="за кожний повний рік військової служби з 24.02.2022 р., по 6 місяців",
+    label="по 6 місяців за кожний повний рік військової служби з 24.02.2022 р.",
     basis=DurationBasis.SERVICE_SINCE_2022,
     months_per_unit=6,
 )
 
 # Component D — slide row Г: 1 month per full year of continuous service before 24.02.2022.
 SERVICE_BEFORE_2022_1_PER_YEAR = DeferralComponent(
-    label="за кожний повний рік безперервної військової служби до 24.02.2022 р., по 1 місяцю",
+    label="по 1 місяцю за кожний повний рік безперервної військової служби до 24.02.2022 р.",
     basis=DurationBasis.SERVICE_BEFORE_2022,
     months_per_unit=1,
 )
 
 # Component E — slide row Д: 1 month per 30-day period of direct combat participation.
 COMBAT_1_PER_30_DAYS = DeferralComponent(
-    label="за кожен 30-денний період безпосередньої участі у бойових діях, по 1 місяцю",
+    label="по 1 місяцю за кожен 30-денний період безпосередньої участі у бойових діях",
     basis=DurationBasis.COMBAT_PARTICIPATION,
     months_per_unit=1,
 )
