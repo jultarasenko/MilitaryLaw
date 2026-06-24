@@ -11,6 +11,9 @@ from enum import StrEnum
 GO_BACK = "go_back"
 """Shared callback data for the "↩ Назад" button, present on every question."""
 
+START_NEW = "start_new"
+"""Callback data for "Сохранити і почати новий розрахунок" button on results."""
+
 
 class Gate2022(StrEnum):
     YES = "gate_2022_yes"
