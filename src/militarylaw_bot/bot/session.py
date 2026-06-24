@@ -27,6 +27,7 @@ class Session:
     last_bot_message_id: int | None = None
     prev_bot_message_ids: list[int] = field(default_factory=list, repr=False)
     history: list[tuple[State, Session]] = field(default_factory=list, repr=False)
+    saved_message_ids: list[int] = field(default_factory=list, repr=False)
 
     def snapshot(self) -> Session:
         """A copy of this session's data, excluding its own history."""
@@ -70,6 +71,8 @@ def get_session(context: ContextTypes.DEFAULT_TYPE) -> Session:
             session.last_bot_message_id = None
         if not hasattr(session, "prev_bot_message_ids"):
             session.prev_bot_message_ids = []
+        if not hasattr(session, "saved_message_ids"):
+            session.saved_message_ids = []
     return session
 
 
