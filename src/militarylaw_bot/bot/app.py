@@ -30,8 +30,20 @@ def build_application() -> Application:
 
 def main() -> None:
     application = build_application()
-    logger.info("Bot starting...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    settings = load_settings()
+    if settings.webhook_url:
+        logger.info("Bot starting (webhook mode)...")
+        application.run_webhook(
+            listen="0.0.0.0",
+            port=settings.webhook_port,
+            url_path=settings.webhook_path,
+            webhook_url=settings.webhook_url,
+            secret_token=settings.webhook_secret,
+            allowed_updates=Update.ALL_TYPES,
+        )
+    else:
+        logger.info("Bot starting (polling mode)...")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,10 @@ from dotenv import load_dotenv
 class Settings:
     bot_token: str
     persistence_path: str
+    webhook_url: str | None
+    webhook_port: int
+    webhook_path: str
+    webhook_secret: str | None
 
 
 def load_settings() -> Settings:
@@ -21,7 +25,17 @@ def load_settings() -> Settings:
     if not bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN environment variable is not set")
 
+    webhook_url = os.environ.get("WEBHOOK_URL") or None
+    webhook_secret = os.environ.get("WEBHOOK_SECRET") or None
+
+    if webhook_url and not webhook_secret:
+        raise RuntimeError("WEBHOOK_SECRET must be set when WEBHOOK_URL is configured")
+
     return Settings(
         bot_token=bot_token,
         persistence_path=os.environ.get("PERSISTENCE_PATH", "/app/data/bot_state.pickle"),
+        webhook_url=webhook_url,
+        webhook_port=int(os.environ.get("WEBHOOK_PORT", "8443")),
+        webhook_path=os.environ.get("WEBHOOK_PATH", "/militarylaw/webhook"),
+        webhook_secret=webhook_secret,
     )
