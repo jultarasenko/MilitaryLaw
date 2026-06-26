@@ -77,6 +77,9 @@ def _track_user(update: Update) -> None:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Track user on /start command
+    _track_user(update)
+
     # Clear entire chat history including saved results
     try:
         # Delete a range of message IDs (go back 100 messages from current)
