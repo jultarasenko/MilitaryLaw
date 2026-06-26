@@ -34,6 +34,7 @@ from militarylaw_bot.bot.session import (
     set_welcome_message_id,
 )
 from militarylaw_bot.bot.states import State
+from militarylaw_bot.db import UserDatabase
 from militarylaw_bot.domain.deferral import (
     KMU_768_BY_CONTRACT_TERM,
     SIX_MONTHS_PLUS_COMBAT,
@@ -52,8 +53,27 @@ _KMU_768_TERM_BY_CALLBACK = {
 # Message history limit - prevent unbounded growth in long conversations
 _MESSAGE_ID_HISTORY_LIMIT = 10
 
+# Global user database reference (set by app.py)
+_user_db: UserDatabase | None = None
+
 type Target = CallbackQuery | Message
 type _RenderFn = Callable[[Target, Session], Awaitable[None]]
+
+
+def set_user_db(user_db: UserDatabase) -> None:
+    """Set the global user database for tracking."""
+    global _user_db
+    _user_db = user_db
+
+
+def _track_user(update: Update) -> None:
+    """Track user interaction."""
+    if _user_db is None:
+        return
+    if update.message and update.message.chat_id:
+        _user_db.track_user(update.message.chat_id)
+    elif update.callback_query and update.callback_query.message:
+        _user_db.track_user(update.callback_query.message.chat_id)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -275,7 +295,7 @@ async def on_contract_term_1538(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(
             texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE),
             parse_mode=ParseMode.HTML,
-            reply_markup=keyboards.back_only(),
+            reply_markup=keyboards.result_actions(),
         )
         return State.RESULT
 
@@ -299,7 +319,7 @@ async def on_contract_term_other(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(
             texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE),
             parse_mode=ParseMode.HTML,
-            reply_markup=keyboards.back_only(),
+            reply_markup=keyboards.result_actions(),
         )
         return State.RESULT
 
@@ -323,7 +343,7 @@ async def on_discharged_before_768(update: Update, context: ContextTypes.DEFAULT
         await query.edit_message_text(
             texts.with_closing_note(texts.NO_DEFERRAL),
             parse_mode=ParseMode.HTML,
-            reply_markup=keyboards.back_only(),
+            reply_markup=keyboards.result_actions(),
         )
         return State.RESULT
 
