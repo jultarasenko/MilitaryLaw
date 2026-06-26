@@ -12,14 +12,13 @@ from telegram.ext import (
 
 from militarylaw_bot.bot import handlers
 from militarylaw_bot.bot.states import State
-from militarylaw_bot.db import UserDatabase
 
 CONVERSATION_NAME = "vidstrochka_conversation"
 
 _TEXT_INPUT = filters.TEXT & ~filters.COMMAND
 
 
-def build_vidstrochka_conversation(user_db: UserDatabase | None = None) -> ConversationHandler:
+def build_vidstrochka_conversation() -> ConversationHandler:
     return ConversationHandler(
         name=CONVERSATION_NAME,
         persistent=True,

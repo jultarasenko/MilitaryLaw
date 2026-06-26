@@ -15,14 +15,11 @@ logger = logging.getLogger(__name__)
 async def send_daily_stats(bot: Bot, admin_chat_id: int, user_db: UserDatabase) -> None:
     """Send daily statistics to admin."""
     try:
-        stats = user_db.get_stats()
+        user_count = user_db.get_user_count()
 
         message = (
             "📊 <b>Щоденна статистика бота</b>\n\n"
-            f"👥 Всього користувачів: <b>{stats['total_users']}</b>\n"
-            f"🟢 Активних сьогодні: <b>{stats['active_today']}</b>\n"
-            f"💬 Повідомлень сьогодні: <b>{stats['messages_today']}</b>\n"
-            f"📅 Перший користувач: <b>{stats['first_user_date']}</b>"
+            f"👥 Всього користувачів: <b>{user_count}</b>"
         )
 
         await bot.send_message(
@@ -30,6 +27,6 @@ async def send_daily_stats(bot: Bot, admin_chat_id: int, user_db: UserDatabase) 
             text=message,
             parse_mode=ParseMode.HTML,
         )
-        logger.info(f"Daily stats sent to {admin_chat_id}")
+        logger.info(f"Daily stats sent to {admin_chat_id}: {user_count} users")
     except Exception as e:
         logger.error(f"Failed to send daily stats: {e}")

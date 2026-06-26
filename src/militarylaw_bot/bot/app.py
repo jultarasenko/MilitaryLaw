@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from functools import partial
 
 from telegram import Update
@@ -33,8 +34,9 @@ def build_application() -> Application:
 
     application = Application.builder().token(settings.bot_token).persistence(persistence).build()
 
-    # Initialize user database
-    user_db = UserDatabase()
+    # Initialize user database - use Docker path if available
+    db_path = "/app/data/users.json" if os.path.exists("/app/data") else "data/users.json"
+    user_db = UserDatabase(db_path=db_path)
     handlers.set_user_db(user_db)
 
     # Add tracking handler first (group -1 runs before all others)
@@ -42,7 +44,7 @@ def build_application() -> Application:
 
     # Add handlers
     application.add_handler(CommandHandler("start", handlers.start))
-    application.add_handler(build_vidstrochka_conversation(user_db=user_db))
+    application.add_handler(build_vidstrochka_conversation())
 
     # Store for job setup in main()
     _job_config = {"settings": settings, "user_db": user_db}
@@ -54,15 +56,16 @@ def main() -> None:
     application = build_application()
     settings = load_settings()
 
-    # Schedule daily stats job
+    # Schedule hourly stats job (every hour at :00)
     if application.job_queue is not None:
         user_db = _job_config["user_db"]
-        application.job_queue.run_daily(
+        application.job_queue.run_repeating(
             partial(send_daily_stats, application.bot, settings.admin_chat_id, user_db),
-            time=12,  # 12:00 UTC
-            name="daily_stats",
+            interval=3600,  # Every hour (3600 seconds)
+            first=0,  # Start immediately
+            name="hourly_stats",
         )
-        logger.info("Daily stats job scheduled at 12:00 UTC")
+        logger.info("Hourly stats job scheduled (every hour at :00)")
 
     if settings.webhook_url:
         logger.info("Bot starting (webhook mode)...")
