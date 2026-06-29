@@ -563,24 +563,22 @@ async def _delete_prev_messages(message: Message, session: Session) -> None:
 async def _delete_messages_except_welcome(
     message: Message, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Delete all messages except WELCOME and saved results."""
+    """Delete all bot-sent messages except WELCOME and saved results."""
     try:
-        current_id = message.message_id
         welcome_id = get_welcome_message_id(context)
         session = get_session(context)
         saved_ids = set(session.saved_message_ids)
 
-        # Delete everything between welcome and current message, except saved
-        if welcome_id is not None:
-            # Delete messages from welcome+1 to current-1, skip saved ones
-            for msg_id in range(welcome_id + 1, current_id):
-                if msg_id not in saved_ids:
-                    try:
-                        await message.get_bot().delete_message(
-                            chat_id=message.chat_id, message_id=msg_id
-                        )
-                    except Exception:
-                        pass
+        ids_to_delete = session.prev_bot_message_ids.copy()
+        if session.last_bot_message_id is not None:
+            ids_to_delete.append(session.last_bot_message_id)
+
+        for msg_id in ids_to_delete:
+            if msg_id not in saved_ids and msg_id != welcome_id:
+                await _safe_delete_message(message.chat_id, msg_id, message.get_bot())
+
+        session.prev_bot_message_ids.clear()
+        session.last_bot_message_id = None
     except Exception:
         pass
 

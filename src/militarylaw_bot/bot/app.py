@@ -32,7 +32,13 @@ def build_application() -> Application:
     settings = load_settings()
     persistence = PicklePersistence(filepath=settings.persistence_path)
 
-    application = Application.builder().token(settings.bot_token).persistence(persistence).build()
+    application = (
+        Application.builder()
+        .token(settings.bot_token)
+        .persistence(persistence)
+        .concurrent_updates(True)
+        .build()
+    )
 
     # Initialize user database - use Docker path if available
     db_path = "/app/data/users.json" if os.path.exists("/app/data") else "data/users.json"
