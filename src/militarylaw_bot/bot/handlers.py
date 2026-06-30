@@ -20,6 +20,7 @@ from militarylaw_bot.bot.callback_data import (
     GO_BACK,
     START_NEW,
     AgeAtSigning,
+    ContractStatus,
     ContractTerm,
     ContractTerm768,
     ContractType,
@@ -124,6 +125,10 @@ async def render_gate_2022(target: Target, session: Session) -> None:
     await _send(target, texts.ASK_GATE_2022, keyboards.gate_2022(), session)
 
 
+async def render_contract_status(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_CONTRACT_STATUS, keyboards.contract_status(), session)
+
+
 async def render_contract_type(target: Target, session: Session) -> None:
     await _send(target, texts.ASK_CONTRACT_TYPE, keyboards.contract_type(), session)
 
@@ -171,6 +176,7 @@ async def render_result(target: Target, session: Session) -> None:
 
 _RENDER_BY_STATE: dict[State, _RenderFn] = {
     State.GATE_2022: render_gate_2022,
+    State.CONTRACT_STATUS: render_contract_status,
     State.CONTRACT_TYPE: render_contract_type,
     State.CONTRACT_TERM_768: render_contract_term_768,
     State.AGE_AT_SIGNING: render_age_at_signing,
@@ -222,7 +228,49 @@ async def on_gate_2022(update: Update, context: ContextTypes.DEFAULT_TYPE) -> St
         )
         return State.GATE_2022
 
+    if query.data == Gate2022.PLANNING:
+        session.push(State.GATE_2022)
+        # Show planning contract disclaimer with proceed button
+        keyboard = keyboards.planning_contract()
+        await query.edit_message_text(
+            texts.PLANNING_CONTRACT_DISCLAIMER,
+            reply_markup=keyboard,
+        )
+        return State.GATE_2022
+
+    if query.data == "planning_proceed":
+        # Go to contract type selection from planning state
+        session.push(State.GATE_2022)
+        await render_contract_type(query, session)
+        return State.CONTRACT_TYPE
+
+    # query.data == Gate2022.NO - show contract status question
     session.push(State.GATE_2022)
+    await render_contract_status(query, session)
+    return State.CONTRACT_STATUS
+
+
+async def on_contract_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
+    query = update.callback_query
+    await query.answer()
+    session = get_session(context)
+
+    if (back_state := await _handle_back(query, session, State.CONTRACT_STATUS)) is not None:
+        return back_state
+
+    if query.data == ContractStatus.NO_SPECIAL_PERIOD:
+        session.push(State.CONTRACT_STATUS)
+        # Show special period message with save and back buttons
+        keyboard = keyboards.message_with_save()
+        await query.edit_message_text(
+            texts.with_closing_note(texts.SPECIAL_PERIOD_CONTRACT),
+            reply_markup=keyboard,
+            parse_mode=ParseMode.HTML,
+        )
+        return State.CONTRACT_STATUS
+
+    # query.data == ContractStatus.YES_TERM_ACTIVE - proceed to contract type
+    session.push(State.CONTRACT_STATUS)
     await render_contract_type(query, session)
     return State.CONTRACT_TYPE
 

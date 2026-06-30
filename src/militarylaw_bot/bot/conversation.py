@@ -25,6 +25,7 @@ def build_vidstrochka_conversation() -> ConversationHandler:
         entry_points=[CommandHandler("vidstrochka", handlers.begin_vidstrochka)],
         states={
             State.GATE_2022: [CallbackQueryHandler(handlers.on_gate_2022)],
+            State.CONTRACT_STATUS: [CallbackQueryHandler(handlers.on_contract_status)],
             State.CONTRACT_TYPE: [CallbackQueryHandler(handlers.on_contract_type)],
             State.CONTRACT_TERM_768: [CallbackQueryHandler(handlers.on_contract_term_768)],
             State.AGE_AT_SIGNING: [CallbackQueryHandler(handlers.on_age_at_signing)],
