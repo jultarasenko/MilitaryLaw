@@ -8,6 +8,7 @@ from militarylaw_bot.bot.callback_data import (
     GO_BACK,
     START_NEW,
     AgeAtSigning,
+    ContractStatus,
     ContractTerm,
     ContractTerm768,
     ContractType,
@@ -37,8 +38,18 @@ def gate_2022() -> InlineKeyboardMarkup:
         [
             ("Так, до 24.02.2022 р.", Gate2022.YES),
             ("Ні, після 24.02.2022 р.", Gate2022.NO),
+            ("Тільки планую укласти контракт", Gate2022.PLANNING),
         ],
         with_back=False,
+    )
+
+
+def contract_status() -> InlineKeyboardMarkup:
+    return _keyboard(
+        [
+            ("Так, на певний строк", ContractStatus.YES_TERM_ACTIVE),
+            ("Ні, до закінчення особливого періоду", ContractStatus.NO_SPECIAL_PERIOD),
+        ]
     )
 
 
@@ -105,6 +116,16 @@ def message_with_save() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("💾 Зберегти й почати новий", callback_data=START_NEW)],
+            [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
+        ]
+    )
+
+
+def planning_contract() -> InlineKeyboardMarkup:
+    """Buttons for planning contract disclaimer: proceed and go back."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📋 Обрати і розрахувати", callback_data="planning_proceed")],
             [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
         ]
     )

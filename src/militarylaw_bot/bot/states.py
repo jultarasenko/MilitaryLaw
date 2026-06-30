@@ -7,6 +7,7 @@ from enum import IntEnum, auto
 
 class State(IntEnum):
     GATE_2022 = auto()
+    CONTRACT_STATUS = auto()
     CONTRACT_TYPE = auto()
     CONTRACT_TERM_768 = auto()
     AGE_AT_SIGNING = auto()

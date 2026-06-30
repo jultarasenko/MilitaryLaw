@@ -18,6 +18,14 @@ START_NEW = "start_new"
 class Gate2022(StrEnum):
     YES = "gate_2022_yes"
     NO = "gate_2022_no"
+    PLANNING = "gate_2022_planning"
+
+
+class ContractStatus(StrEnum):
+    """Check if contract has specific term that hasn't expired yet."""
+
+    YES_TERM_ACTIVE = "contract_status_yes_term"
+    NO_SPECIAL_PERIOD = "contract_status_no_period"
 
 
 class ContractType(StrEnum):
