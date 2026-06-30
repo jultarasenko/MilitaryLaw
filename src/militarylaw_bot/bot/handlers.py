@@ -15,6 +15,9 @@ from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, 
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 
+from militarylaw_bot.config import load_settings
+from militarylaw_bot.jobs import send_daily_stats
+
 from militarylaw_bot.bot import keyboards, texts
 from militarylaw_bot.bot.callback_data import (
     GO_BACK,
@@ -102,6 +105,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Send fresh WELCOME message
     welcome_msg = await update.message.reply_text(texts.WELCOME)
     set_welcome_message_id(context, welcome_msg.message_id)
+
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send statistics only to admin."""
+    settings = load_settings()
+
+    # Check if user is admin
+    if update.message.chat_id != settings.admin_chat_id:
+        await update.message.reply_text("⛔ Ця команда доступна тільки адміністратору")
+        return
+
+    # Send stats
+    await send_daily_stats(context.bot, settings.admin_chat_id, _user_db)
 
 
 async def begin_vidstrochka(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
