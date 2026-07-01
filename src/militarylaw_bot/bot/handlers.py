@@ -18,8 +18,10 @@ from telegram.ext import ContextTypes, ConversationHandler
 from militarylaw_bot.bot import keyboards, texts
 from militarylaw_bot.bot.callback_data import (
     GO_BACK,
+    GO_HOME,
     START_NEW,
     AgeAtSigning,
+    ContractExtension,
     ContractStatus,
     ContractTerm,
     ContractTerm768,
@@ -129,6 +131,10 @@ async def render_contract_status(target: Target, session: Session) -> None:
     await _send(target, texts.ASK_CONTRACT_STATUS, keyboards.contract_status(), session)
 
 
+async def render_contract_extension(target: Target, session: Session) -> None:
+    await _send(target, texts.ASK_CONTRACT_EXTENSION, keyboards.contract_extension(), session)
+
+
 async def render_contract_type(target: Target, session: Session) -> None:
     await _send(target, texts.ASK_CONTRACT_TYPE, keyboards.contract_type(), session)
 
@@ -177,6 +183,7 @@ async def render_result(target: Target, session: Session) -> None:
 _RENDER_BY_STATE: dict[State, _RenderFn] = {
     State.GATE_2022: render_gate_2022,
     State.CONTRACT_STATUS: render_contract_status,
+    State.CONTRACT_EXTENSION: render_contract_extension,
     State.CONTRACT_TYPE: render_contract_type,
     State.CONTRACT_TERM_768: render_contract_term_768,
     State.AGE_AT_SIGNING: render_age_at_signing,
@@ -200,6 +207,16 @@ async def on_gate_2022(update: Update, context: ContextTypes.DEFAULT_TYPE) -> St
 
     if (back_state := await _handle_back(query, session, State.GATE_2022)) is not None:
         return back_state
+
+    if query.data == GO_HOME:
+        # Return to first question (stay on GATE_2022)
+        session.history.clear()
+        session.pending_result = None
+        session.combat_units = 0
+        session.service_since_2022_years = 0
+        session.service_before_2022_years = 0
+        await render_gate_2022(query, session)
+        return State.GATE_2022
 
     if query.data == START_NEW:
         # Remove buttons from NO_2022_CONTRACT, save it, start new session
@@ -258,21 +275,68 @@ async def on_contract_status(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if (back_state := await _handle_back(query, session, State.CONTRACT_STATUS)) is not None:
         return back_state
 
-    if query.data == ContractStatus.NO_SPECIAL_PERIOD:
-        session.push(State.CONTRACT_STATUS)
-        # Show special period message with save and back buttons
-        keyboard = keyboards.message_with_save()
-        await query.edit_message_text(
-            texts.with_closing_note(texts.SPECIAL_PERIOD_CONTRACT),
-            reply_markup=keyboard,
-            parse_mode=ParseMode.HTML,
-        )
-        return State.CONTRACT_STATUS
+    if query.data == GO_HOME:
+        # Return to first question (GATE_2022)
+        session.history.clear()
+        session.pending_result = None
+        session.combat_units = 0
+        session.service_since_2022_years = 0
+        session.service_before_2022_years = 0
+        await render_gate_2022(query, session)
+        return State.GATE_2022
 
-    # query.data == ContractStatus.YES_TERM_ACTIVE - proceed to contract type
+    if query.data == ContractStatus.YES_TERM_ACTIVE:
+        # Ask about automatic extension
+        session.push(State.CONTRACT_STATUS)
+        await render_contract_extension(query, session)
+        return State.CONTRACT_EXTENSION
+
+    # query.data == ContractStatus.NO_SPECIAL_PERIOD - show SPECIAL_PERIOD_CONTRACT message
     session.push(State.CONTRACT_STATUS)
-    await render_contract_type(query, session)
-    return State.CONTRACT_TYPE
+    # Show SPECIAL_PERIOD_CONTRACT message with save and back buttons
+    keyboard = keyboards.message_with_save()
+    await query.edit_message_text(
+        texts.with_closing_note(texts.SPECIAL_PERIOD_CONTRACT),
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML,
+    )
+    return State.CONTRACT_STATUS
+
+
+async def on_contract_extension(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
+    query = update.callback_query
+    await query.answer()
+    session = get_session(context)
+
+    if (back_state := await _handle_back(query, session, State.CONTRACT_EXTENSION)) is not None:
+        return back_state
+
+    if query.data == GO_HOME:
+        # Return to first question (GATE_2022)
+        session.history.clear()
+        session.pending_result = None
+        session.combat_units = 0
+        session.service_since_2022_years = 0
+        session.service_before_2022_years = 0
+        await render_gate_2022(query, session)
+        return State.GATE_2022
+
+    if query.data == ContractExtension.NO_AUTO_EXTENSION:
+        # Proceed to contract type selection
+        session.push(State.CONTRACT_EXTENSION)
+        await render_contract_type(query, session)
+        return State.CONTRACT_TYPE
+
+    # query.data == ContractExtension.YES_AUTO_EXTENSION - show SPECIAL_PERIOD_CONTRACT message
+    session.push(State.CONTRACT_EXTENSION)
+    # Show SPECIAL_PERIOD_CONTRACT message with save and back buttons
+    keyboard = keyboards.message_with_save()
+    await query.edit_message_text(
+        texts.with_closing_note(texts.SPECIAL_PERIOD_CONTRACT),
+        reply_markup=keyboard,
+        parse_mode=ParseMode.HTML,
+    )
+    return State.CONTRACT_EXTENSION
 
 
 async def on_contract_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
