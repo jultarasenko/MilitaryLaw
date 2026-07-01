@@ -6,8 +6,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from militarylaw_bot.bot.callback_data import (
     GO_BACK,
+    GO_HOME,
     START_NEW,
     AgeAtSigning,
+    ContractExtension,
     ContractStatus,
     ContractTerm,
     ContractTerm768,
@@ -49,6 +51,15 @@ def contract_status() -> InlineKeyboardMarkup:
         [
             ("Так, на певний строк", ContractStatus.YES_TERM_ACTIVE),
             ("Ні, до закінчення особливого періоду", ContractStatus.NO_SPECIAL_PERIOD),
+        ]
+    )
+
+
+def contract_extension() -> InlineKeyboardMarkup:
+    return _keyboard(
+        [
+            ("Так, було", ContractExtension.YES_AUTO_EXTENSION),
+            ("Ні, не було", ContractExtension.NO_AUTO_EXTENSION),
         ]
     )
 
@@ -112,10 +123,11 @@ def result_actions() -> InlineKeyboardMarkup:
 
 
 def message_with_save() -> InlineKeyboardMarkup:
-    """Buttons for informational messages (NO_2022_CONTRACT): save and go back."""
+    """Buttons for informational messages (NO_2022_CONTRACT): save, go home, and go back."""
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("💾 Зберегти й почати новий", callback_data=START_NEW)],
+            [InlineKeyboardButton("🏠 Повернутись на стартову сторінку", callback_data=GO_HOME)],
             [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
         ]
     )
