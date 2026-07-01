@@ -6,8 +6,11 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from militarylaw_bot.bot.callback_data import (
     GO_BACK,
+    GO_HOME,
     START_NEW,
     AgeAtSigning,
+    ContractExtension,
+    ContractStatus,
     ContractTerm,
     ContractTerm768,
     ContractType,
@@ -37,8 +40,27 @@ def gate_2022() -> InlineKeyboardMarkup:
         [
             ("Так, до 24.02.2022 р.", Gate2022.YES),
             ("Ні, після 24.02.2022 р.", Gate2022.NO),
+            ("Тільки планую укласти контракт", Gate2022.PLANNING),
         ],
         with_back=False,
+    )
+
+
+def contract_status() -> InlineKeyboardMarkup:
+    return _keyboard(
+        [
+            ("Так, на певний строк", ContractStatus.YES_TERM_ACTIVE),
+            ("Ні, до закінчення особливого періоду", ContractStatus.NO_SPECIAL_PERIOD),
+        ]
+    )
+
+
+def contract_extension() -> InlineKeyboardMarkup:
+    return _keyboard(
+        [
+            ("Так, було", ContractExtension.YES_AUTO_EXTENSION),
+            ("Ні, не було", ContractExtension.NO_AUTO_EXTENSION),
+        ]
     )
 
 
@@ -101,10 +123,21 @@ def result_actions() -> InlineKeyboardMarkup:
 
 
 def message_with_save() -> InlineKeyboardMarkup:
-    """Buttons for informational messages (NO_2022_CONTRACT): save and go back."""
+    """Buttons for informational messages (NO_2022_CONTRACT): save, go home, and go back."""
     return InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("💾 Зберегти й почати новий", callback_data=START_NEW)],
+            [InlineKeyboardButton("🏠 Повернутись на стартову сторінку", callback_data=GO_HOME)],
+            [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
+        ]
+    )
+
+
+def planning_contract() -> InlineKeyboardMarkup:
+    """Buttons for planning contract disclaimer: proceed and go back."""
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("📋 Обрати і розрахувати", callback_data="planning_proceed")],
             [InlineKeyboardButton(BACK_BUTTON_LABEL, callback_data=GO_BACK)],
         ]
     )
