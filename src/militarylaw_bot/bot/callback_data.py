@@ -14,10 +14,28 @@ GO_BACK = "go_back"
 START_NEW = "start_new"
 """Callback data for "Сохранити і почати новий розрахунок" button on results."""
 
+GO_HOME = "go_home"
+"""Callback data for "Повернутись на стартову сторінку" button on informational screens."""
+
 
 class Gate2022(StrEnum):
     YES = "gate_2022_yes"
     NO = "gate_2022_no"
+    PLANNING = "gate_2022_planning"
+
+
+class ContractStatus(StrEnum):
+    """Check if contract has specific term that hasn't expired yet."""
+
+    YES_TERM_ACTIVE = "contract_status_yes_term"
+    NO_SPECIAL_PERIOD = "contract_status_no_period"
+
+
+class ContractExtension(StrEnum):
+    """Check if contract had automatic extension until end of special period."""
+
+    YES_AUTO_EXTENSION = "contract_extension_yes"
+    NO_AUTO_EXTENSION = "contract_extension_no"
 
 
 class ContractType(StrEnum):
