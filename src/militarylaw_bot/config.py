@@ -16,7 +16,7 @@ class Settings:
     webhook_port: int
     webhook_path: str
     webhook_secret: str | None
-    admin_chat_id: int
+    admin_chat_ids: list[int]
 
 
 def load_settings() -> Settings:
@@ -32,9 +32,11 @@ def load_settings() -> Settings:
     if webhook_url and not webhook_secret:
         raise RuntimeError("WEBHOOK_SECRET must be set when WEBHOOK_URL is configured")
 
-    admin_chat_id = os.environ.get("ADMIN_CHAT_ID")
-    if not admin_chat_id:
-        raise RuntimeError("ADMIN_CHAT_ID environment variable is not set")
+    admin_chat_ids_str = os.environ.get("ADMIN_CHAT_IDS")
+    if not admin_chat_ids_str:
+        raise RuntimeError("ADMIN_CHAT_IDS environment variable is not set")
+
+    admin_chat_ids = [int(chat_id.strip()) for chat_id in admin_chat_ids_str.split(",")]
 
     return Settings(
         bot_token=bot_token,
@@ -43,5 +45,5 @@ def load_settings() -> Settings:
         webhook_port=int(os.environ.get("WEBHOOK_PORT", "8443")),
         webhook_path=os.environ.get("WEBHOOK_PATH", "/militarylaw/webhook"),
         webhook_secret=webhook_secret,
-        admin_chat_id=int(admin_chat_id),
+        admin_chat_ids=admin_chat_ids,
     )

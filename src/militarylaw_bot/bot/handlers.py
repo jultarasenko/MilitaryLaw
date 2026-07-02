@@ -108,16 +108,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send statistics only to admin."""
+    """Send statistics only to admins."""
     settings = load_settings()
 
     # Check if user is admin
-    if update.message.chat_id != settings.admin_chat_id:
+    if update.message.chat_id not in settings.admin_chat_ids:
         await update.message.reply_text("⛔ Ця команда доступна тільки адміністратору")
         return
 
-    # Send stats
-    await send_daily_stats(context.bot, settings.admin_chat_id, _user_db)
+    # Send stats to all admins
+    for admin_chat_id in settings.admin_chat_ids:
+        await send_daily_stats(context.bot, admin_chat_id, _user_db)
 
 
 async def begin_vidstrochka(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
