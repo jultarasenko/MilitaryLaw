@@ -18,7 +18,7 @@ async def send_daily_stats(bot: Bot, admin_chat_id: int, user_db: UserDatabase) 
         user_count = user_db.get_user_count()
 
         message = (
-            "📊 <b>Щоденна статистика бота</b>\n\n"
+            "📊 <b>Статистика бота:</b>\n\n"
             f"👥 Всього користувачів: <b>{user_count}</b>"
         )
 
