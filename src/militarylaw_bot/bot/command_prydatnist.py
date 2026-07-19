@@ -342,6 +342,10 @@ async def handle_prydatnist_callback(update: Update, context: ContextTypes.DEFAU
             if step_name == "main_menu":
                 # Back to main menu
                 await _render_main_menu(query, context)
+            elif step_name == "search_keyword":
+                # Back to search keyword prompt
+                state["_returning_from_back"] = True
+                await _handle_search_keyword(query, _suitability_db, context)
             elif step_name == "groups":
                 # Back to groups list
                 await _handle_browse_groups(query, _suitability_db, context)
@@ -448,11 +452,96 @@ async def _render_main_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def _handle_search_keyword(query, db, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Prompt for disease keyword search."""
-    text = "🔍 <b>Введіть ключове слово хвороби</b>\n\nНаприклад: туберкульоз, діабет, гіпертонія"
+    state = _get_state(context)
+
+    # Push to history if not returning from back
+    if not state.get("_returning_from_back"):
+        _push_history(state, "search_keyword")
+    state["_returning_from_back"] = False
+
+    state["search_mode"] = True
+
+    text = "🔍 <b>Введіть ключове слово хвороби</b>\n\nНаприклад: туберкульоз"
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("↩ Назад", callback_data="pryd_back_to_start")],
+        [InlineKeyboardButton("↩ Назад", callback_data="pryd_go_back")],
     ])
     await _send_pryd(query, text, keyboard, context)
+
+
+async def handle_keyword_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle text input for keyword search."""
+    if not update.message or not update.message.text:
+        return
+
+    # Only process if in search mode
+    state = _get_state(context)
+    if not state.get("search_mode"):
+        return
+
+    state["search_mode"] = False  # Reset search mode
+
+    user_id = update.effective_user.id
+    chat_id = update.message.chat_id
+    keyword = update.message.text.strip()
+
+    _init_db()
+    _init_tracker()
+
+    logger.info(f"🔍 Keyword search for: {keyword}")
+
+    # Remove buttons from the search prompt message
+    try:
+        prev_record = _message_tracker.get_last_message(user_id, COMMAND_NAME) if _message_tracker else None
+        if prev_record:
+            await context.bot.edit_message_reply_markup(
+                chat_id=chat_id,
+                message_id=prev_record.message_id,
+                reply_markup=None
+            )
+            logger.info(f"Removed buttons from search prompt message {prev_record.message_id}")
+    except Exception as e:
+        logger.debug(f"Could not remove buttons from search prompt: {e}")
+
+    # Search articles, groups, and point descriptions
+    articles = _suitability_db.search_by_keyword(keyword)
+
+    if not articles:
+        text = f"❌ <b>Не знайдено статей для: \"{keyword}\"</b>\n\nСпробуйте повторити пошук по іншому ключовому слову або виберіть інший спосіб пошуку."
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔍 Новий пошук", callback_data="pryd_search_keyword")],
+            [InlineKeyboardButton("📚 Перегляд груп хвороб", callback_data="pryd_browse_groups")],
+        ])
+        msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+        # Track message
+        if _message_tracker:
+            _message_tracker.set_last_message(user_id, COMMAND_NAME, chat_id, msg.message_id)
+        return
+
+    # Show search results
+    text = f"🔍 <b>Результати пошуку для \"{keyword}\":</b>\n\n"
+    keyboard_buttons = []
+
+    for article in articles:
+        text += f"<b>Стаття {article.number}</b> - {article.keywords}\n"
+        callback = f"pryd_article_{article.number}"
+        keyboard_buttons.append([
+            InlineKeyboardButton(
+                f"Стаття {article.number}",
+                callback_data=callback
+            )
+        ])
+
+    keyboard_buttons.append([InlineKeyboardButton("↩ Назад", callback_data="pryd_go_back")])
+    keyboard = InlineKeyboardMarkup(keyboard_buttons)
+
+    msg = await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=keyboard)
+
+    # Track message
+    if _message_tracker:
+        _message_tracker.set_last_message(user_id, COMMAND_NAME, chat_id, msg.message_id)
+
+    logger.info(f"Found {len(articles)} articles for keyword: {keyword}")
 
 
 async def _handle_browse_groups(query, db, context: ContextTypes.DEFAULT_TYPE) -> None:
