@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from difflib import SequenceMatcher
 
 
 @dataclass
@@ -104,6 +105,101 @@ class SuitabilityDB:
         ]
         conn.close()
         return articles
+
+    def _similarity_score(self, text: str, keyword: str) -> float:
+        """Calculate similarity score between text and keyword (0.0 to 1.0)."""
+        if not text or not keyword:
+            return 0.0
+        text_lower = text.lower()
+        keyword_lower = keyword.lower()
+        return SequenceMatcher(None, text_lower, keyword_lower).ratio()
+
+    def _contains_fuzzy(self, text: str, keyword: str, threshold: float = 0.8) -> bool:
+        """Check if text contains keyword with fuzzy matching (handles typos). Threshold 0.8 = 80% match."""
+        if not text or not keyword:
+            return False
+
+        text_lower = text.lower()
+        keyword_lower = keyword.lower()
+
+        # Exact match (case-insensitive)
+        if keyword_lower in text_lower:
+            return True
+
+        # Fuzzy match on whole text
+        if self._similarity_score(text, keyword) >= threshold:
+            return True
+
+        # Try fuzzy match on words
+        words = text_lower.split()
+        for word in words:
+            if self._similarity_score(word, keyword_lower) >= threshold:
+                return True
+
+        return False
+
+    def search_by_keyword(self, keyword: str) -> list[Article]:
+        """Search across all fields with fuzzy matching for typos and case-insensitive.
+
+        Searches in: article keywords, group titles, and point descriptions.
+        """
+        conn = self._get_conn()
+        cursor = conn.cursor()
+        keyword_pattern = f"%{keyword}%"
+
+        # First do exact search (fast)
+        cursor.execute("""
+            SELECT DISTINCT a.article_number, a.included_keywords, a.group_number
+            FROM articles a
+            LEFT JOIN appendix2_groups g ON a.group_number = g.group_number
+            LEFT JOIN article_points ap ON a.article_number = ap.article_number
+            WHERE LOWER(a.included_keywords) LIKE LOWER(?)
+               OR LOWER(g.title) LIKE LOWER(?)
+               OR LOWER(ap.description) LIKE LOWER(?)
+            ORDER BY a.article_number
+        """, (keyword_pattern, keyword_pattern, keyword_pattern))
+
+        exact_results = cursor.fetchall()
+        articles_dict = {}
+
+        # Add exact matches
+        for row in exact_results:
+            articles_dict[row["article_number"]] = Article(
+                number=row["article_number"],
+                keywords=row["included_keywords"],
+                group_number=row["group_number"],
+            )
+
+        # If few results, try fuzzy matching
+        if len(articles_dict) < 5:
+            cursor.execute("""
+                SELECT DISTINCT a.article_number, a.included_keywords, a.group_number,
+                       COALESCE(a.included_keywords, '') as keywords_text,
+                       COALESCE(g.title, '') as group_title,
+                       COALESCE(ap.description, '') as point_desc
+                FROM articles a
+                LEFT JOIN appendix2_groups g ON a.group_number = g.group_number
+                LEFT JOIN article_points ap ON a.article_number = ap.article_number
+            """)
+
+            for row in cursor.fetchall():
+                if row["article_number"] in articles_dict:
+                    continue  # Already have this from exact match
+
+                # Check fuzzy match
+                if (self._contains_fuzzy(row["keywords_text"], keyword) or
+                    self._contains_fuzzy(row["group_title"], keyword) or
+                    self._contains_fuzzy(row["point_desc"], keyword)):
+                    articles_dict[row["article_number"]] = Article(
+                        number=row["article_number"],
+                        keywords=row["included_keywords"],
+                        group_number=row["group_number"],
+                    )
+
+        conn.close()
+
+        # Sort by article number
+        return sorted(articles_dict.values(), key=lambda a: int(a.number) if a.number.isdigit() else 999)
 
     def get_groups(self) -> list[AppendixGroup]:
         """Get all groups from Додаток 2."""
