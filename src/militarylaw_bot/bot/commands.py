@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from militarylaw_bot.bot import handlers
 from militarylaw_bot.bot.command_stats import handle_stats
-from militarylaw_bot.bot.command_prydatnist import handle_prydatnist, handle_prydatnist_callback
+from militarylaw_bot.bot.command_prydatnist import handle_prydatnist, handle_prydatnist_callback, handle_keyword_input
 from militarylaw_bot.bot.command_vidstrochka import get_vidstrochka_conversation
 
 logger = logging.getLogger(__name__)
@@ -47,5 +47,11 @@ def register_commands(application: Application) -> None:
     logger.info("Registering /prydatnist command handler...")
     application.add_handler(CommandHandler("prydatnist", handle_prydatnist))
     logger.info("✅ Registered /prydatnist command handler")
+
+    # ===== Text input for prydatnist keyword search =====
+    logger.info("Registering keyword search text handler...")
+    text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_keyword_input)
+    application.add_handler(text_handler, group=2)
+    logger.info("✅ Registered keyword search text handler")
 
     logger.info("✅ All commands registered successfully")
