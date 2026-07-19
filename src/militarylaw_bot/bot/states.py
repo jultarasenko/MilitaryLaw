@@ -6,6 +6,7 @@ from enum import IntEnum, auto
 
 
 class State(IntEnum):
+    # /vidstrochka states
     GATE_2022 = auto()
     CONTRACT_STATUS = auto()
     CONTRACT_EXTENSION = auto()
@@ -19,3 +20,13 @@ class State(IntEnum):
     AWAIT_SERVICE_SINCE_2022_YEARS = auto()
     AWAIT_SERVICE_BEFORE_2022_YEARS = auto()
     RESULT = auto()
+
+    # /prydatnist states
+    SEARCH_DISEASE = auto()
+    SELECT_DISEASE_FROM_KEYWORD = auto()
+    SELECT_GROUP = auto()
+    SELECT_ARTICLE = auto()
+    SELECT_POINT = auto()
+    SELECT_MILITARY_UNITS = auto()
+    ASK_HEALTH_PARAMS = auto()
+    FINAL_RESULT = auto()
