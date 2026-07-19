@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, PicklePersistence
+from telegram.ext import Application, PicklePersistence
 
 from militarylaw_bot.bot import handlers
-from militarylaw_bot.bot.conversation import build_vidstrochka_conversation
+from militarylaw_bot.bot.commands import register_commands
+from militarylaw_bot.bot.command_stats import set_user_db as set_stats_db
 from militarylaw_bot.bot.middleware import UserTrackingHandler
+from militarylaw_bot.bot.utils import get_data_path
 from militarylaw_bot.config import load_settings
 from militarylaw_bot.db import UserDatabase
 
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def build_application() -> Application:
+    logger.info("Building application...")
     settings = load_settings()
     persistence = PicklePersistence(filepath=settings.persistence_path)
 
@@ -32,19 +34,23 @@ def build_application() -> Application:
         .concurrent_updates(True)
         .build()
     )
+    logger.info("✅ Application instance created")
 
-    # Initialize user database - use Docker path if available
-    db_path = "/app/data/users.json" if os.path.exists("/app/data") else "data/users.json"
+    # Initialize user database
+    db_path = str(get_data_path("users.json"))
     user_db = UserDatabase(db_path=db_path)
     handlers.set_user_db(user_db)
+    set_stats_db(user_db)
+    logger.info(f"✅ User database initialized: {db_path}")
 
     # Add tracking handler first (group -1 runs before all others)
     application.add_handler(UserTrackingHandler(user_db), group=-1)
+    logger.info("✅ Tracking handler added")
 
-    # Add handlers
-    application.add_handler(CommandHandler("start", handlers.start))
-    application.add_handler(CommandHandler("stats", handlers.stats))
-    application.add_handler(build_vidstrochka_conversation())
+    # Register all commands and handlers
+    logger.info("About to register commands...")
+    register_commands(application)
+    logger.info("✅ Commands registered")
 
     return application
 

@@ -9,14 +9,12 @@ for whichever step is on top of the session's history stack.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
-
-from militarylaw_bot.config import load_settings
-from militarylaw_bot.jobs import send_daily_stats
 
 from militarylaw_bot.bot import keyboards, texts
 from militarylaw_bot.bot.callback_data import (
@@ -48,6 +46,8 @@ from militarylaw_bot.domain.deferral import (
 )
 from militarylaw_bot.domain.formatting import format_breakdown
 from militarylaw_bot.domain.quantities import QuantityParseError, parse_count
+
+logger = logging.getLogger(__name__)
 
 _KMU_768_TERM_BY_CALLBACK = {
     ContractTerm768.MONTHS_6: "6_months",
@@ -86,11 +86,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Track user on /start command
     _track_user(update)
 
-    # Clear entire chat history including saved results
+    # Get saved message IDs before clearing
+    session = get_session(context)
+    saved_ids = set(session.saved_message_ids.copy())
+
+    # Clear entire chat history except saved results
     try:
         # Delete a range of message IDs (go back 100 messages from current)
         current_id = update.message.message_id
         for msg_id in range(max(1, current_id - 100), current_id):
+            # Skip saved messages
+            if msg_id in saved_ids:
+                continue
             try:
                 await update.message.get_bot().delete_message(
                     chat_id=update.message.chat_id, message_id=msg_id
@@ -100,25 +107,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:
         pass
 
-    # Clear all saved results and session
+    # Clear all session but preserve saved results
     reset_session(context)
+    session = get_session(context)
+    session.saved_message_ids = list(saved_ids)
+
     # Send fresh WELCOME message
     welcome_msg = await update.message.reply_text(texts.WELCOME)
     set_welcome_message_id(context, welcome_msg.message_id)
-
-
-async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send statistics only to admins."""
-    settings = load_settings()
-
-    # Check if user is admin
-    if update.message.chat_id not in settings.admin_chat_ids:
-        await update.message.reply_text("⛔ Ця команда доступна тільки адміністратору")
-        return
-
-    # Send stats to all admins
-    for admin_chat_id in settings.admin_chat_ids:
-        await send_daily_stats(context.bot, admin_chat_id, _user_db)
 
 
 async def begin_vidstrochka(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
@@ -219,6 +215,7 @@ _RENDER_BY_STATE: dict[State, _RenderFn] = {
 
 async def on_gate_2022(update: Update, context: ContextTypes.DEFAULT_TYPE) -> State:
     query = update.callback_query
+    logger.warning(f"🟠 on_gate_2022 called with callback: {query.data}")
     await query.answer()
     session = get_session(context)
 

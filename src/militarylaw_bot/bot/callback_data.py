@@ -66,3 +66,30 @@ class AgeAtSigning(StrEnum):
 class DischargedBefore768(StrEnum):
     YES = "discharged_before_768_yes"
     NO = "discharged_before_768_no"
+
+
+class PrydatnistCallback(StrEnum):
+    """Callbacks for /prydatnist flow."""
+
+    SEARCH_BY_KEYWORD = "pryd_search_keyword"
+    BROWSE_GROUPS = "pryd_browse_groups"
+
+    # For group/article selection - use prefix + number
+    # Format: "pryd_group_{group_number}", "pryd_article_{article_number}"
+
+    # For point selection
+    # Format: "pryd_point_{article_number}_{point_letter}"
+
+    # For military unit selection
+    # Format: "pryd_unit_{column_number}" - can select multiple, then "pryd_unit_done"
+    UNITS_DONE = "pryd_unit_done"
+    UNITS_SKIP = "pryd_unit_skip"
+
+    # Health parameters
+    # Format: "pryd_health_height", "pryd_health_weight", "pryd_health_vision", "pryd_health_hearing"
+    HEALTH_SKIP = "pryd_health_skip"
+    HEALTH_DONE = "pryd_health_done"
+
+    # Results
+    SAVE_RESULT = "pryd_save_result"
+    NEW_ASSESSMENT = "pryd_new_assessment"
