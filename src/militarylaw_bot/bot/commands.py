@@ -6,42 +6,34 @@ import logging
 
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
-from militarylaw_bot.bot import handlers
 from militarylaw_bot.bot.command_stats import handle_stats
 from militarylaw_bot.bot.command_prydatnist import handle_prydatnist, handle_prydatnist_callback, handle_keyword_input
-from militarylaw_bot.bot.command_vidstrochka import get_vidstrochka_conversation
+from militarylaw_bot.bot.unified_conversation import build_unified_conversation
 
 logger = logging.getLogger(__name__)
 
 
 def register_commands(application: Application) -> None:
-    """Register all bot commands and handlers.
-
-    Handler registration order is critical:
-    1. Callback-specific handlers (most specific first)
-    2. Conversation handlers (less specific)
-    3. Basic commands
-    """
+    """Register all bot commands and handlers."""
     logger.info("Registering bot commands...")
 
-    # ===== Callback Handlers (MUST come FIRST, in higher priority group) =====
-    logger.info("Registering pryd_* callback handler in group 0...")
+    # ===== Unified Conversation (all commands: menu, vidstrochka, szch, /start) =====
+    logger.info("Registering unified conversation...")
+    application.add_handler(build_unified_conversation())
+    logger.info("✅ Registered unified conversation")
+
+    # ===== Callback Handlers =====
+    logger.info("Registering pryd_* callback handler...")
     callback_handler = CallbackQueryHandler(
         callback=handle_prydatnist_callback,
         pattern=r"^pryd_"
     )
-    application.add_handler(callback_handler, group=0)
-    logger.info("✅ Registered pryd_* callback handler in group 0")
+    application.add_handler(callback_handler)
+    logger.info("✅ Registered pryd_* callback handler")
 
-    # ===== /vidstrochka Conversation =====
-    logger.info("Registering /vidstrochka conversation in group 1...")
-    application.add_handler(get_vidstrochka_conversation(), group=1)
-    logger.info("✅ Registered /vidstrochka conversation in group 1")
-
-    # ===== Basic Commands =====
-    application.add_handler(CommandHandler("start", handlers.start))
+    # ===== /stats Command =====
     application.add_handler(CommandHandler("stats", handle_stats))
-    logger.info("✅ Registered /start, /stats")
+    logger.info("✅ Registered /stats")
 
     # ===== /prydatnist Command =====
     logger.info("Registering /prydatnist command handler...")
@@ -51,7 +43,7 @@ def register_commands(application: Application) -> None:
     # ===== Text input for prydatnist keyword search =====
     logger.info("Registering keyword search text handler...")
     text_handler = MessageHandler(filters.TEXT & ~filters.COMMAND, handle_keyword_input)
-    application.add_handler(text_handler, group=2)
+    application.add_handler(text_handler)
     logger.info("✅ Registered keyword search text handler")
 
     logger.info("✅ All commands registered successfully")

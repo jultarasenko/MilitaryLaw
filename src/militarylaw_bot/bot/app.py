@@ -21,6 +21,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Reduce noise from httpx
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 def build_application() -> Application:
     logger.info("Building application...")
