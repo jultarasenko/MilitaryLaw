@@ -48,6 +48,15 @@ from militarylaw_bot.bot.command_szch import (
     handle_szch_erdr,
     handle_szch_result,
 )
+from militarylaw_bot.bot.command_prydatnist_handlers import (
+    handle_prydatnist_start,
+    handle_prydatnist_search_method,
+    handle_prydatnist_keyword_input,
+    handle_prydatnist_groups,
+    handle_prydatnist_articles,
+    handle_prydatnist_points,
+    handle_prydatnist_result,
+)
 
 _TEXT_INPUT = filters.TEXT & ~filters.COMMAND
 
@@ -88,9 +97,24 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return "szch_formation"
 
     elif text == "Придатність":
-        from militarylaw_bot.bot.command_prydatnist import handle_prydatnist
-        await handle_prydatnist(update, context)
-        return "menu"
+        session.push_history()
+        session.current_command = CommandType.PRYDATNIST
+        session.step = "prydatnist_search_method"
+        session.answers.clear()
+
+        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+        text_msg = (
+            "🏥 <b>Оцінка придатності до військової служби</b>\n\n"
+            "Виберіть спосіб пошуку хвороби:\n\n"
+            "<i>Рекомендація: якщо у вас кілька хвороб, краще пройтись по кожній окремо.</i>"
+        )
+        from militarylaw_bot.bot.unified_keyboards import prydatnist_search_method
+        await update.message.reply_text(
+            text_msg,
+            reply_markup=prydatnist_search_method(),
+            parse_mode="HTML",
+        )
+        return "prydatnist_search_method"
 
     else:
         await update.message.reply_text("❌ Невпізнана команда. Виберіть один з варіантів.")
@@ -479,6 +503,60 @@ async def _szch_result_wrapper(
     return await handle_szch_result(update, context)
 
 
+async def _prydatnist_search_method_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_search_method(update, context)
+
+
+async def _prydatnist_keyword_input_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_keyword_input(update, context)
+
+
+async def _prydatnist_groups_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_groups(update, context)
+
+
+async def _prydatnist_articles_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_articles(update, context)
+
+
+async def _prydatnist_points_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_points(update, context)
+
+
+async def _prydatnist_result_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_result(update, context)
+
+
 async def _start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle /start command - entry point to conversation."""
     chat_id = update.effective_chat.id
@@ -557,6 +635,13 @@ def build_unified_conversation() -> ConversationHandler:
             "szch_commander_consent": [MessageHandler(_TEXT_INPUT, _szch_commander_consent_wrapper)],
             "szch_erdr": [MessageHandler(_TEXT_INPUT, _szch_erdr_wrapper)],
             "szch_result": [MessageHandler(_TEXT_INPUT, _szch_result_wrapper)],
+            # Prydatnist states (integrated in single tree)
+            "prydatnist_search_method": [MessageHandler(_TEXT_INPUT, _prydatnist_search_method_wrapper)],
+            "prydatnist_keyword_input": [MessageHandler(_TEXT_INPUT, _prydatnist_keyword_input_wrapper)],
+            "prydatnist_groups": [MessageHandler(_TEXT_INPUT, _prydatnist_groups_wrapper)],
+            "prydatnist_articles": [MessageHandler(_TEXT_INPUT, _prydatnist_articles_wrapper)],
+            "prydatnist_points": [MessageHandler(_TEXT_INPUT, _prydatnist_points_wrapper)],
+            "prydatnist_result": [MessageHandler(_TEXT_INPUT, _prydatnist_result_wrapper)],
         },
         fallbacks=[
             CommandHandler("start", _start_handler),

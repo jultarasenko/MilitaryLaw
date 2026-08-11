@@ -62,7 +62,7 @@ async def handle_szch_want_return(update: Update, context: ContextTypes.DEFAULT_
         session.step = "szch_result"
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
-            texts.SZCH_DO_NOT_WANT_RETURN,
+            texts.SZCH_NOT_APPLICABLE_RESULT,
             reply_markup=result_actions(),
             parse_mode="HTML",
         )
@@ -95,7 +95,7 @@ async def handle_szch_first_time_awol(update: Update, context: ContextTypes.DEFA
         session.step = "szch_result"
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
-            texts.SZCH_NOT_FIRST_TIME_RESULT,
+            texts.SZCH_FIRST_TIME_REQUIRED,
             reply_markup=result_actions(),
             parse_mode="HTML",
         )

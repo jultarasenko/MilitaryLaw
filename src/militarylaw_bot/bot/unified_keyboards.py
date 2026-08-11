@@ -183,3 +183,73 @@ def szch_consent() -> ReplyKeyboardMarkup:
         "Ні",
         "Не знаю",
     ])
+
+
+# Prydatnist keyboards
+def prydatnist_search_method() -> ReplyKeyboardMarkup:
+    return build_options_keyboard([
+        "🔍 Пошук по ключовому слову",
+        "📚 Перегляд груп хвороб",
+    ])
+
+
+def prydatnist_groups_navigation(group_count: int) -> ReplyKeyboardMarkup:
+    """Keyboard for navigating disease groups."""
+    buttons = [
+        [KeyboardButton(f"{i+1}") for i in range(min(5, group_count))]
+    ]
+    # Add navigation
+    buttons.append([
+        KeyboardButton("← Назад"),
+        KeyboardButton("↑ Меню")
+    ])
+    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+
+
+def prydatnist_articles_navigation(article_count: int) -> ReplyKeyboardMarkup:
+    """Keyboard for navigating articles in group."""
+    buttons = []
+    for i in range(0, article_count, 2):
+        row = [KeyboardButton(str(i+1))]
+        if i+1 < article_count:
+            row.append(KeyboardButton(str(i+2)))
+        buttons.append(row)
+
+    # Add navigation
+    buttons.append([
+        KeyboardButton("← Назад"),
+        KeyboardButton("↑ Меню")
+    ])
+    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+
+
+def prydatnist_points_navigation(point_count: int) -> ReplyKeyboardMarkup:
+    """Keyboard for selecting points."""
+    buttons = []
+    for point in range(point_count):
+        letter = chr(97 + point)  # a, b, c, etc.
+        buttons.append([KeyboardButton(letter.upper())])
+
+    # Add navigation
+    buttons.append([
+        KeyboardButton("← Назад"),
+        KeyboardButton("↑ Меню")
+    ])
+    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+
+
+def prydatnist_units_selection() -> ReplyKeyboardMarkup:
+    """Keyboard for unit selection."""
+    buttons = [
+        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
+    ]
+    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+
+
+def prydatnist_result_actions() -> ReplyKeyboardMarkup:
+    """Reply keyboard for result with option to start new search."""
+    buttons = [
+        [KeyboardButton("🔍 Нов пошук")],
+        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
+    ]
+    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
