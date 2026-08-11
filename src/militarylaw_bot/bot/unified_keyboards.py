@@ -20,7 +20,7 @@ def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
     """Build main menu keyboard for command selection."""
     buttons = [
         [KeyboardButton("Відстрочка")],
-        [KeyboardButton("Придатність")],
+        # [KeyboardButton("Придатність")],
         [KeyboardButton("СЗЧ")],
     ]
     return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
