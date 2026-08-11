@@ -131,21 +131,109 @@ async def handle_prydatnist_keyword_input(update: Update, context: ContextTypes.
 
     session.answers["search_results"] = articles
     session.answers["search_keyword"] = keyword
-    session.step = "prydatnist_result"
+    session.answers["search_articles"] = [a.number for a in articles]
+    session.push_history()
+    session.step = "prydatnist_search_results"
 
-    # Show results
-    result_text = f"📋 <b>Результати пошуку для: \"{keyword}\"</b>\n\n"
+    # Show results with full information
+    result_text = f"🔍 <b>Результати пошуку для \"{keyword}\":</b>\n\n"
     for article in articles:
-        result_text += f"Стаття {article.number}\n"
+        result_text += f"<b>Стаття {article.number}</b> - {article.keywords or 'Без опису'}\n\n"
+
+    from militarylaw_bot.bot.unified_keyboards import ReplyKeyboardMarkup, KeyboardButton
+
+    # Create keyboard with article numbers
+    buttons = []
+    for article in articles:
+        buttons.append([KeyboardButton(f"Стаття {article.number}")])
+    buttons.append([
+        KeyboardButton("← Назад"),
+        KeyboardButton("↑ Меню")
+    ])
+    keyboard = ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
 
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
     await update.message.reply_text(
         result_text,
-        reply_markup=result_actions(),
+        reply_markup=keyboard,
         parse_mode="HTML",
     )
 
-    return "prydatnist_result"
+    return "prydatnist_search_results"
+
+
+async def handle_prydatnist_search_results(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Handle article selection from search results."""
+    chat_id = update.effective_chat.id
+    session = get_session(chat_id)
+    text = update.message.text.strip()
+
+    _init_db()
+
+    if not _suitability_db:
+        await update.message.reply_text("❌ Помилка: база даних не ініціалізована")
+        return "prydatnist_search_results"
+
+    articles = session.answers.get("search_articles", [])
+
+    # Parse "Стаття N" format
+    if text.startswith("Стаття "):
+        article_num = text.replace("Стаття ", "").strip()
+    else:
+        await update.message.reply_text("❌ Виберіть статтю зі списку")
+        return "prydatnist_search_results"
+
+    if article_num not in articles:
+        await update.message.reply_text(f"❌ Стаття {article_num} не знайдена в результатах пошуку")
+        return "prydatnist_search_results"
+
+    session.answers["selected_article"] = article_num
+    session.push_history()
+    session.step = "prydatnist_points"
+
+    # Get points for article
+    article = _suitability_db.get_article(str(article_num))
+    if not article or not article.points:
+        session.push_history()
+        session.step = "prydatnist_result"
+        text_msg = f"📋 <b>Стаття {article_num}</b>\n\nНема розділів для цієї статті"
+        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+        await update.message.reply_text(
+            text_msg,
+            reply_markup=result_actions(),
+            parse_mode="HTML",
+        )
+        return "prydatnist_result"
+
+    # Show article with all points and descriptions
+    text_msg = f"📋 <b>Стаття {article_num}</b>\n\n"
+    text_msg += f"{article.keywords or 'Без опису'}\n\n"
+    text_msg += "<b>Пункти:</b>\n\n"
+
+    for i, point in enumerate(article.points):
+        letter = chr(ord('а') + i)  # а, б, в, г, etc.
+        text_msg += f"<b>{letter})</b> {point.description}\n\n"
+
+    from militarylaw_bot.bot.unified_keyboards import ReplyKeyboardMarkup, KeyboardButton
+
+    # Create keyboard with point letters
+    buttons = []
+    for i in range(len(article.points)):
+        letter = chr(ord('а') + i)
+        buttons.append([KeyboardButton(letter.upper())])
+    buttons.append([
+        KeyboardButton("← Назад"),
+        KeyboardButton("↑ Меню")
+    ])
+    keyboard = ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+
+    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+    await update.message.reply_text(
+        text_msg,
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    return "prydatnist_points"
 
 
 async def handle_prydatnist_groups(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -227,6 +315,7 @@ async def handle_prydatnist_articles(update: Update, context: ContextTypes.DEFAU
     # Get points for article
     article = _suitability_db.get_article(article_num)
     if not article or not article.points:
+        session.push_history()
         session.step = "prydatnist_result"
         text_msg = f"📋 <b>Стаття {article_num}</b>\n\nНема розділів для цієї статті"
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
@@ -264,18 +353,19 @@ async def handle_prydatnist_points(update: Update, context: ContextTypes.DEFAULT
         return "prydatnist_points"
 
     article_num = session.answers.get("selected_article")
-    article = _suitability_db.get_article(article_num)
+    article = _suitability_db.get_article(str(article_num))
 
     if not article or not article.points:
         await update.message.reply_text("❌ Стаття не знайдена")
         return "prydatnist_points"
 
-    # Convert letter to index (A=0, B=1, etc.)
-    if len(text) != 1 or ord(text) < ord('A') or ord(text) > ord('Z'):
-        await update.message.reply_text("❌ Виберіть букву від A до Z")
+    # Convert letter to index (А/а=0, Б/б=1, etc.) - handle both upper and lowercase
+    text_lower = text.lower()
+    if len(text_lower) != 1 or ord(text_lower) < ord('а') or ord(text_lower) > ord('я'):
+        await update.message.reply_text("❌ Виберіть букву від а до я")
         return "prydatnist_points"
 
-    point_idx = ord(text) - ord('A')
+    point_idx = ord(text_lower) - ord('а')
     if point_idx >= len(article.points):
         await update.message.reply_text(f"❌ Розділ повинен бути від A до {chr(ord('A') + len(article.points) - 1)}")
         return "prydatnist_points"

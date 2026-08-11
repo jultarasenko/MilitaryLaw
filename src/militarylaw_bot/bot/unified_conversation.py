@@ -52,27 +52,50 @@ from militarylaw_bot.bot.command_prydatnist_handlers import (
     handle_prydatnist_start,
     handle_prydatnist_search_method,
     handle_prydatnist_keyword_input,
+    handle_prydatnist_search_results,
     handle_prydatnist_groups,
     handle_prydatnist_articles,
     handle_prydatnist_points,
     handle_prydatnist_result,
 )
+from militarylaw_bot.domain.suitability import SuitabilityDB
+from militarylaw_bot.bot.utils import get_db_path
+
+_suitability_db = None
+
+
+def _init_db():
+    """Initialize database on first use."""
+    global _suitability_db
+    if _suitability_db is None:
+        try:
+            db_path = get_db_path()
+            _suitability_db = SuitabilityDB(db_path)
+            logger.info(f"✅ SuitabilityDB initialized: {db_path}")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize SuitabilityDB: {e}")
+
 
 _TEXT_INPUT = filters.TEXT & ~filters.COMMAND
 
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle main menu selection - route to appropriate command."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-    text = update.message.text.strip() if update.message else None
-    logger.info(f"handle_menu_selection called: chat_id={chat_id}, text='{text}', session.step={session.step}")
+    try:
+        chat_id = update.effective_chat.id
+        session = get_session(chat_id)
+        text = update.message.text.strip() if update.message else None
+        logger.info(f"handle_menu_selection called: chat_id={chat_id}, text='{text}', len={len(text) if text else 0}, session.step={session.step}")
+        logger.info(f"Text == 'Придатність': {text == 'Придатність'}")
+    except Exception as e:
+        logger.error(f"Error in handle_menu_selection start: {e}", exc_info=True)
+        raise
 
     if text == "Відстрочка":
+        session.answers.clear()
         session.push_history()
         session.current_command = CommandType.VIDSTROCHKA
         session.step = "vidstrochka_gate_2022"
-        session.answers.clear()
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
@@ -83,10 +106,10 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return "vidstrochka_gate_2022"
 
     elif text == "СЗЧ":
+        session.answers.clear()
         session.push_history()
         session.current_command = CommandType.SZCH
         session.step = "szch_formation"
-        session.answers.clear()
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
@@ -97,10 +120,10 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return "szch_formation"
 
     elif text == "Придатність":
+        session.answers.clear()
         session.push_history()
         session.current_command = CommandType.PRYDATNIST
         session.step = "prydatnist_search_method"
-        session.answers.clear()
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         text_msg = (
@@ -114,9 +137,11 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
             reply_markup=prydatnist_search_method(),
             parse_mode="HTML",
         )
+        logger.info(f"Returning from handle_menu_selection: 'prydatnist_search_method'")
         return "prydatnist_search_method"
 
     else:
+        logger.info(f"Unknown menu option, returning 'menu'")
         await update.message.reply_text("❌ Невпізнана команда. Виберіть один з варіантів.")
         return "menu"
 
@@ -130,9 +155,11 @@ async def _universal_back_handler(
     text = update.message.text.strip()
 
     if text == "← Назад":
+        logger.info(f"Back button pressed: chat_id={chat_id}, current_step={session.step}, history_len={len(session.history)}")
         if session.pop_history():
             step = session.step
             command = session.current_command
+            logger.info(f"After pop_history: step={step}, command={command}")
 
             if step == "menu":
                 return await _reset_to_menu(update, context)
@@ -141,7 +168,11 @@ async def _universal_back_handler(
                 return await _dispatch_vidstrochka(update, context, session)
             elif command == CommandType.SZCH:
                 return await _dispatch_szch(update, context, session)
+            elif command == CommandType.PRYDATNIST:
+                logger.info(f"Dispatching prydatnist for step: {step}")
+                return await _dispatch_prydatnist(update, context, session)
 
+        logger.info(f"No history to pop, returning current step: {session.step}")
         return session.step
 
     if text == "↑ Меню":
@@ -287,15 +318,118 @@ async def _dispatch_szch(
     return "menu"
 
 
+async def _dispatch_prydatnist(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session
+) -> str:
+    """Re-render prydatnist step from history."""
+    from militarylaw_bot.bot.unified_keyboards import (
+        prydatnist_search_method,
+        prydatnist_groups_navigation,
+        prydatnist_articles_navigation,
+        prydatnist_points_navigation,
+        result_actions,
+    )
+
+    chat_id = update.effective_chat.id
+    step = session.step
+    logger.info(f"_dispatch_prydatnist called: step={step}, answers={session.answers}")
+
+    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+
+    if step == "prydatnist_search_method":
+        await update.message.reply_text(
+            "🏥 <b>Оцінка придатності до військової служби</b>\n\n"
+            "Виберіть спосіб пошуку хвороби:",
+            reply_markup=prydatnist_search_method(),
+            parse_mode="HTML",
+        )
+    elif step == "prydatnist_keyword_input":
+        await update.message.reply_text(
+            "🔍 <b>Введіть ключове слово хвороби</b>\n\nНаприклад: туберкульоз",
+            reply_markup=result_actions(),
+            parse_mode="HTML",
+        )
+    elif step == "prydatnist_search_results":
+        articles = session.answers.get("search_results", [])
+        keyword = session.answers.get("search_keyword", "")
+        result_text = f"🔍 <b>Результати пошуку для \"{keyword}\":</b>\n\n"
+        for article in articles:
+            result_text += f"<b>Стаття {article.number}</b> - {article.keywords or 'Без опису'}\n\n"
+
+        from militarylaw_bot.bot.unified_keyboards import ReplyKeyboardMarkup, KeyboardButton
+        buttons = []
+        for article in articles:
+            buttons.append([KeyboardButton(f"Стаття {article.number}")])
+        buttons.append([
+            KeyboardButton("← Назад"),
+            KeyboardButton("↑ Меню")
+        ])
+        keyboard = ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+
+        await update.message.reply_text(
+            result_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    elif step == "prydatnist_groups":
+        _init_db()
+        groups = _suitability_db.get_groups() if _suitability_db else []
+        text_msg = "📚 <b>Групи хвороб</b>\n\n"
+        for i, group in enumerate(groups, 1):
+            text_msg += f"{i}. {group.name}\n"
+        await update.message.reply_text(
+            text_msg,
+            reply_markup=prydatnist_groups_navigation(len(groups)),
+            parse_mode="HTML",
+        )
+    elif step == "prydatnist_articles":
+        articles = session.answers.get("group_articles", [])
+        text_msg = "📚 <b>Статті в групі</b>\n\n"
+        text_msg += f"Статей в групі: {len(articles)}\n\n"
+        text_msg += "Виберіть номер статті"
+        await update.message.reply_text(
+            text_msg,
+            reply_markup=prydatnist_articles_navigation(len(articles)),
+            parse_mode="HTML",
+        )
+    elif step == "prydatnist_points":
+        article_num = session.answers.get("selected_article")
+        _init_db()
+        article = _suitability_db.get_article(str(article_num)) if _suitability_db else None
+        if article and article.points:
+            text_msg = f"📋 <b>Стаття {article_num}</b>\n\n"
+            text_msg += f"{article.keywords or 'Без опису'}\n\n"
+            text_msg += "<b>Пункти:</b>\n\n"
+            for i, point in enumerate(article.points):
+                letter = chr(ord('а') + i)
+                text_msg += f"<b>{letter})</b> {point.description}\n\n"
+            await update.message.reply_text(
+                text_msg,
+                reply_markup=prydatnist_points_navigation(len(article.points)),
+                parse_mode="HTML",
+            )
+    elif step == "prydatnist_result":
+        prev_step = session.get_previous_step()
+        if prev_step and prev_step != "prydatnist_result":
+            session.step = prev_step
+            return await _dispatch_prydatnist(update, context, session)
+        return "prydatnist_result"
+
+    return step
+
+
 async def _check_navigation_and_dispatch(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
     """Check for navigation buttons and re-dispatch if needed."""
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
+    text = update.message.text.strip() if update.message else ""
+    logger.info(f"_check_navigation_and_dispatch: chat_id={chat_id}, text='{text}', step={session.step}")
 
     # Check navigation first
     nav_result = await _universal_back_handler(update, context)
+    logger.info(f"_universal_back_handler returned: {nav_result}")
     if nav_result is not None:
         return nav_result
 
@@ -515,10 +649,22 @@ async def _prydatnist_search_method_wrapper(
 async def _prydatnist_keyword_input_wrapper(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
+    text = update.message.text.strip() if update.message else ""
+    logger.info(f"_prydatnist_keyword_input_wrapper: text='{text}'")
     nav = await _check_navigation_and_dispatch(update, context)
+    logger.info(f"_prydatnist_keyword_input_wrapper: nav={nav}")
     if nav is not None:
         return nav
     return await handle_prydatnist_keyword_input(update, context)
+
+
+async def _prydatnist_search_results_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_prydatnist_search_results(update, context)
 
 
 async def _prydatnist_groups_wrapper(
@@ -568,7 +714,10 @@ async def _start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def _menu_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Wrapper for menu state handler."""
+    text = update.message.text.strip() if update.message else ""
+    logger.info(f"_menu_wrapper called: text='{text}'")
     nav = await _check_navigation_and_dispatch(update, context)
+    logger.info(f"_menu_wrapper: nav={nav}")
     if nav is not None:
         return nav
     return await handle_menu_selection(update, context)
@@ -579,7 +728,7 @@ async def _enter_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
     logger.info(f"Entering menu state from entry_points: chat_id={chat_id}")
-    return await handle_menu_selection(update, context)
+    return await _menu_wrapper(update, context)
 
 
 async def _reset_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -601,7 +750,7 @@ def build_unified_conversation() -> ConversationHandler:
     """Build unified single-tree conversation for all commands."""
     return ConversationHandler(
         name="unified_conversation",
-        persistent=True,
+        persistent=False,
         entry_points=[
             CommandHandler("start", _start_handler),
             MessageHandler(filters.TEXT & ~filters.COMMAND, _enter_menu),
@@ -638,6 +787,7 @@ def build_unified_conversation() -> ConversationHandler:
             # Prydatnist states (integrated in single tree)
             "prydatnist_search_method": [MessageHandler(_TEXT_INPUT, _prydatnist_search_method_wrapper)],
             "prydatnist_keyword_input": [MessageHandler(_TEXT_INPUT, _prydatnist_keyword_input_wrapper)],
+            "prydatnist_search_results": [MessageHandler(_TEXT_INPUT, _prydatnist_search_results_wrapper)],
             "prydatnist_groups": [MessageHandler(_TEXT_INPUT, _prydatnist_groups_wrapper)],
             "prydatnist_articles": [MessageHandler(_TEXT_INPUT, _prydatnist_articles_wrapper)],
             "prydatnist_points": [MessageHandler(_TEXT_INPUT, _prydatnist_points_wrapper)],
