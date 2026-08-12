@@ -12,7 +12,7 @@ from militarylaw_bot.bot.global_session import CommandType, get_session
 from militarylaw_bot.bot.unified_keyboards import (
     szch_formation, szch_yes_no, szch_awol_date,
     szch_return_type, szch_zsu_submission, szch_dsst_submission,
-    szch_general_arrival, szch_consent, text_input_keyboard,
+    szch_general_arrival, szch_consent, szch_yes_no_unknown, text_input_keyboard,
     result_actions,
 )
 
@@ -62,7 +62,7 @@ async def handle_szch_want_return(update: Update, context: ContextTypes.DEFAULT_
         session.step = "szch_result"
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
-            texts.SZCH_NOT_APPLICABLE_RESULT,
+            texts.with_szch_closing_note(texts.SZCH_NOT_APPLICABLE_RESULT),
             reply_markup=result_actions(),
             parse_mode="HTML",
         )
@@ -95,7 +95,7 @@ async def handle_szch_first_time_awol(update: Update, context: ContextTypes.DEFA
         session.step = "szch_result"
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
-            texts.SZCH_FIRST_TIME_REQUIRED,
+            texts.with_szch_closing_note(texts.SZCH_FIRST_TIME_REQUIRED),
             reply_markup=result_actions(),
             parse_mode="HTML",
         )
@@ -129,11 +129,22 @@ async def handle_szch_awol_date(update: Update, context: ContextTypes.DEFAULT_TY
         session.step = "szch_result"
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
-            texts.SZCH_NEED_DATE,
+            texts.with_szch_closing_note(texts.SZCH_NEED_DATE),
             reply_markup=result_actions(),
             parse_mode="HTML",
         )
         return "szch_result"
+
+    if text == "З 13.06.2026":
+        session.answers["return_type"] = "Загальний порядок повернення"
+        session.step = "szch_general_arrival"
+        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+        await update.message.reply_text(
+            texts.SZCH_GENERAL_ARRIVAL,
+            reply_markup=szch_general_arrival(),
+            parse_mode="HTML",
+        )
+        return "szch_general_arrival"
 
     session.step = "szch_return_type"
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
@@ -170,19 +181,28 @@ async def handle_szch_return_type(update: Update, context: ContextTypes.DEFAULT_
         return "szch_general_arrival"
 
     formation = session.answers.get("formation", "")
-    session.step = "szch_simplified_submission"
 
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
 
     if formation == "ДПСУ":
-        session.step = "result"
+        session.step = "szch_result"
         await update.message.reply_text(
-            texts.SZCH_DPSU_SIMPLIFIED_UNAVAILABLE,
+            texts.with_szch_closing_note(texts.SZCH_DPSU_SIMPLIFIED_UNAVAILABLE),
             reply_markup=result_actions(),
             parse_mode="HTML",
         )
         return "szch_result"
 
+    if formation == "НГУ":
+        session.step = "szch_erdr"
+        await update.message.reply_text(
+            texts.SZCH_ERDR_QUESTION,
+            reply_markup=szch_yes_no_unknown(),
+            parse_mode="HTML",
+        )
+        return "szch_erdr"
+
+    session.step = "szch_simplified_submission"
     if formation == "ДССТ":
         keyboard = szch_dsst_submission()
     else:
@@ -209,14 +229,14 @@ async def handle_szch_simplified_submission(update: Update, context: ContextType
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
     await update.message.reply_text(
         texts.SZCH_ERDR_QUESTION,
-        reply_markup=szch_yes_no(),
+        reply_markup=szch_yes_no_unknown(),
         parse_mode="HTML",
     )
     return "szch_erdr"
 
 
 async def handle_szch_erdr(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle ERDR question."""
+    """Handle ERDR question and generate final result."""
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
 
@@ -227,14 +247,14 @@ async def handle_szch_erdr(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     session.answers["erdr"] = text
     session.push_history()
-    session.step = "result"
+    session.step = "szch_result"
 
-    if text == "Так":
-        result_text = texts.SZCH_ERDR_YES
-    elif text == "Ні":
-        result_text = texts.SZCH_ERDR_NO
+    return_type = session.answers.get("return_type", "")
+
+    if return_type == "Спрощений порядок повернення":
+        result_text = texts.build_szch_simplified_result(session.answers)
     else:
-        result_text = texts.SZCH_ERDR_UNKNOWN
+        result_text = texts.build_szch_general_result(session.answers)
 
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
     await update.message.reply_text(
@@ -276,22 +296,15 @@ async def handle_szch_commander_consent(update: Update, context: ContextTypes.DE
 
     session.answers["commander_consent"] = text
     session.push_history()
-    session.step = "result"
-
-    if text == "Так":
-        result_text = texts.SZCH_COMMANDER_CONSENT_YES
-    elif text == "Ні":
-        result_text = texts.SZCH_COMMANDER_CONSENT_NO
-    else:
-        result_text = texts.SZCH_COMMANDER_CONSENT_UNKNOWN
+    session.step = "szch_erdr"
 
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
     await update.message.reply_text(
-        result_text,
-        reply_markup=result_actions(),
+        texts.SZCH_ERDR_QUESTION,
+        reply_markup=szch_yes_no_unknown(),
         parse_mode="HTML",
     )
-    return "szch_result"
+    return "szch_erdr"
 
 
 async def handle_szch_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:

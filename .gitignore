@@ -9,3 +9,4 @@ algorithm/
 .ruff_cache/
 data/users.json
 *.pickle
+example/
