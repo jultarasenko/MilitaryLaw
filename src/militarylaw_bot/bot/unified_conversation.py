@@ -21,6 +21,8 @@ from militarylaw_bot.bot.unified_keyboards import (
     build_main_menu_keyboard,
     vidstrochka_gate_2022,
     szch_formation,
+    szch_yes_no_unknown,
+    szch_return_type,
 )
 from militarylaw_bot.bot.command_vidstrochka import (
     handle_vidstrochka_gate_2022,
@@ -285,37 +287,87 @@ async def _dispatch_vidstrochka(
 async def _dispatch_szch(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session
 ) -> str:
-    """Re-render SZCH step from history."""
+    """Re-render SZCH step from history - just show the screen, don't process input."""
+    from militarylaw_bot.bot.unified_keyboards import szch_formation, szch_yes_no, szch_awol_date, szch_return_type, szch_zsu_submission, szch_dsst_submission, szch_general_arrival, szch_consent, text_input_keyboard, result_actions
+
+    chat_id = update.effective_chat.id
     step = session.step
 
+    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+
     if step == "szch_formation":
-        return await handle_szch_formation(update, context)
+        await update.message.reply_text(
+            texts.SZCH_FORMATION_QUESTION,
+            reply_markup=szch_formation(),
+            parse_mode="HTML",
+        )
     elif step == "szch_want_return":
-        return await handle_szch_want_return(update, context)
+        await update.message.reply_text(
+            texts.SZCH_WANT_RETURN,
+            reply_markup=szch_yes_no(),
+            parse_mode="HTML",
+        )
     elif step == "szch_first_time_awol":
-        return await handle_szch_first_time_awol(update, context)
+        await update.message.reply_text(
+            texts.SZCH_FIRST_TIME_AWOL,
+            reply_markup=szch_yes_no(),
+            parse_mode="HTML",
+        )
     elif step == "szch_awol_date":
-        return await handle_szch_awol_date(update, context)
+        await update.message.reply_text(
+            texts.SZCH_AWOL_DATE,
+            reply_markup=szch_awol_date(),
+            parse_mode="HTML",
+        )
     elif step == "szch_return_type":
-        return await handle_szch_return_type(update, context)
+        await update.message.reply_text(
+            texts.SZCH_RETURN_TYPE,
+            reply_markup=szch_return_type(),
+            parse_mode="HTML",
+        )
     elif step == "szch_simplified_submission":
-        return await handle_szch_simplified_submission(update, context)
+        formation = session.answers.get("formation")
+        if formation == "ЗСУ":
+            keyboard = szch_zsu_submission()
+            prompt_text = texts.SZCH_ZSU_SIMPLIFIED_SUBMISSION
+        elif formation == "ДССТ":
+            keyboard = szch_dsst_submission()
+            prompt_text = texts.SZCH_DSST_SIMPLIFIED_SUBMISSION
+        else:
+            keyboard = szch_zsu_submission()
+            prompt_text = texts.SZCH_ZSU_SIMPLIFIED_SUBMISSION
+        await update.message.reply_text(
+            prompt_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
     elif step == "szch_general_arrival":
-        return await handle_szch_general_arrival(update, context)
+        await update.message.reply_text(
+            texts.SZCH_GENERAL_ARRIVAL,
+            reply_markup=szch_general_arrival(),
+            parse_mode="HTML",
+        )
     elif step == "szch_commander_consent":
-        return await handle_szch_commander_consent(update, context)
+        await update.message.reply_text(
+            texts.SZCH_COMMANDER_CONSENT,
+            reply_markup=szch_consent(),
+            parse_mode="HTML",
+        )
     elif step == "szch_erdr":
-        return await handle_szch_erdr(update, context)
+        await update.message.reply_text(
+            texts.SZCH_ERDR_QUESTION,
+            reply_markup=szch_yes_no_unknown(),
+            parse_mode="HTML",
+        )
     elif step == "szch_result":
         # Result is a leaf node - show last question instead
         prev_step = session.get_previous_step()
         if prev_step and prev_step != "szch_result":
             session.step = prev_step
             return await _dispatch_szch(update, context, session)
-        # Fallback
         return "szch_result"
 
-    return "menu"
+    return step
 
 
 async def _dispatch_prydatnist(

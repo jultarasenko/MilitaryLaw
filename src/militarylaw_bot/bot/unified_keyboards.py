@@ -177,12 +177,16 @@ def szch_general_arrival() -> ReplyKeyboardMarkup:
     ])
 
 
-def szch_consent() -> ReplyKeyboardMarkup:
+def szch_yes_no_unknown() -> ReplyKeyboardMarkup:
     return build_options_keyboard([
         "Так",
         "Ні",
         "Не знаю",
     ])
+
+
+def szch_consent() -> ReplyKeyboardMarkup:
+    return szch_yes_no_unknown()
 
 
 # Prydatnist keyboards
