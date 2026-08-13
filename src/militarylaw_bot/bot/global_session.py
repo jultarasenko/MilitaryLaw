@@ -11,6 +11,7 @@ class CommandType(str, Enum):
     VIDSTROCHKA = "vidstrochka"
     # PRYDATNIST = "prydatnist"
     SZCH = "szch"
+    TRANSFER = "transfer"
 
 
 @dataclass

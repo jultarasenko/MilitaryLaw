@@ -50,6 +50,10 @@ from militarylaw_bot.bot.command_szch import (
     handle_szch_erdr,
     handle_szch_result,
 )
+from militarylaw_bot.bot.command_transfer import (
+    handle_transfer_start,
+    handle_transfer_generic,
+)
 from militarylaw_bot.bot.command_prydatnist_handlers import (
     handle_prydatnist_start,
     handle_prydatnist_search_method,
@@ -121,6 +125,21 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return "szch_formation"
 
+    elif text == "Переведення":
+        session.answers.clear()
+        session.current_command = CommandType.TRANSFER
+        session.step = "transfer_formation"
+        session.push_history()
+
+        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+        from militarylaw_bot.bot.unified_keyboards import transfer_formation
+        await update.message.reply_text(
+            texts.TRANSFER_FORMATION_QUESTION,
+            reply_markup=transfer_formation(),
+            parse_mode="HTML",
+        )
+        return "transfer_formation"
+
     elif text == "Придатність":
         session.answers.clear()
         session.push_history()
@@ -170,6 +189,8 @@ async def _universal_back_handler(
                 return await _dispatch_vidstrochka(update, context, session)
             elif command == CommandType.SZCH:
                 return await _dispatch_szch(update, context, session)
+            elif command == CommandType.TRANSFER:
+                return await _dispatch_transfer(update, context, session)
             elif command == CommandType.PRYDATNIST:
                 logger.info(f"Dispatching prydatnist for step: {step}")
                 return await _dispatch_prydatnist(update, context, session)
@@ -366,6 +387,161 @@ async def _dispatch_szch(
             session.step = prev_step
             return await _dispatch_szch(update, context, session)
         return "szch_result"
+
+    return step
+
+
+async def _dispatch_transfer(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, session
+) -> str:
+    """Re-render transfer step from history - just show the screen, don't process input."""
+    from militarylaw_bot.bot.unified_keyboards import (
+        transfer_formation, transfer_service_type, transfer_initiative,
+        transfer_graduate_year, transfer_zsu_ground, transfer_dpsu_ground,
+        transfer_position_level, transfer_unit_type, transfer_current_unit_duration,
+        transfer_previous_transfer_gap, transfer_rear_destination, transfer_combat_goal,
+        transfer_yes_no, transfer_yes_no_unknown, transfer_family_circumstance,
+        result_actions,
+    )
+
+    chat_id = update.effective_chat.id
+    step = session.step
+
+    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+
+    if step == "transfer_formation":
+        await update.message.reply_text(
+            texts.TRANSFER_FORMATION_QUESTION,
+            reply_markup=transfer_formation(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_service_type":
+        await update.message.reply_text(
+            texts.TRANSFER_SERVICE_TYPE,
+            reply_markup=transfer_service_type(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_initiative":
+        await update.message.reply_text(
+            texts.TRANSFER_INITIATIVE,
+            reply_markup=transfer_initiative(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_graduate_year":
+        await update.message.reply_text(
+            texts.TRANSFER_GRADUATE_YEAR,
+            reply_markup=transfer_graduate_year(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_zsu_ground":
+        await update.message.reply_text(
+            texts.TRANSFER_ZSU_GROUND,
+            reply_markup=transfer_zsu_ground(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_dpsu_ground":
+        await update.message.reply_text(
+            texts.TRANSFER_DPSU_GROUND,
+            reply_markup=transfer_dpsu_ground(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_position_level":
+        await update.message.reply_text(
+            texts.TRANSFER_POSITION_LEVEL,
+            reply_markup=transfer_position_level(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_unit_type":
+        await update.message.reply_text(
+            texts.TRANSFER_UNIT_TYPE,
+            reply_markup=transfer_unit_type(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_unit_type_unknown":
+        await update.message.reply_text(
+            texts.TRANSFER_UNIT_TYPE_UNKNOWN,
+            reply_markup=result_actions(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_current_unit_duration":
+        await update.message.reply_text(
+            texts.TRANSFER_CURRENT_UNIT_DURATION,
+            reply_markup=transfer_current_unit_duration(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_previous_transfer_gap":
+        await update.message.reply_text(
+            texts.TRANSFER_PREVIOUS_TRANSFER_GAP,
+            reply_markup=transfer_previous_transfer_gap(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_rear_destination":
+        await update.message.reply_text(
+            texts.TRANSFER_REAR_DESTINATION,
+            reply_markup=transfer_rear_destination(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_combat_goal":
+        await update.message.reply_text(
+            texts.TRANSFER_COMBAT_GOAL,
+            reply_markup=transfer_combat_goal(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_recommendation_letter":
+        await update.message.reply_text(
+            texts.TRANSFER_RECOMMENDATION_LETTER,
+            reply_markup=transfer_yes_no(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_medical_conclusion":
+        await update.message.reply_text(
+            texts.TRANSFER_MEDICAL_CONCLUSION,
+            reply_markup=transfer_yes_no(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_family_circumstance":
+        await update.message.reply_text(
+            texts.TRANSFER_FAMILY_CIRCUMSTANCE,
+            reply_markup=transfer_family_circumstance(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_supporting_documents":
+        await update.message.reply_text(
+            texts.TRANSFER_SUPPORTING_DOCUMENTS,
+            reply_markup=transfer_yes_no(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_officer_status":
+        await update.message.reply_text(
+            texts.TRANSFER_OFFICER_STATUS,
+            reply_markup=transfer_yes_no(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_command_approval":
+        await update.message.reply_text(
+            texts.TRANSFER_COMMAND_APPROVAL,
+            reply_markup=transfer_yes_no(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_command_health_obstacle":
+        await update.message.reply_text(
+            texts.TRANSFER_COMMAND_HEALTH_OBSTACLE,
+            reply_markup=transfer_yes_no_unknown(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_command_family_care_need":
+        await update.message.reply_text(
+            texts.TRANSFER_COMMAND_FAMILY_CARE_NEED,
+            reply_markup=transfer_yes_no_unknown(),
+            parse_mode="HTML",
+        )
+    elif step == "transfer_result":
+        # Result is a leaf node - show last question instead
+        prev_step = session.get_previous_step()
+        if prev_step and prev_step != "transfer_result":
+            session.step = prev_step
+            return await _dispatch_transfer(update, context, session)
+        return "transfer_result"
 
     return step
 
@@ -755,6 +931,17 @@ async def _prydatnist_result_wrapper(
     return await handle_prydatnist_result(update, context)
 
 
+# Transfer wrappers
+async def _transfer_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    """Wrapper for all transfer states - check navigation first."""
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_transfer_generic(update, context)
+
+
 async def _start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle /start command - entry point to conversation."""
     chat_id = update.effective_chat.id
@@ -836,6 +1023,29 @@ def build_unified_conversation() -> ConversationHandler:
             "szch_commander_consent": [MessageHandler(_TEXT_INPUT, _szch_commander_consent_wrapper)],
             "szch_erdr": [MessageHandler(_TEXT_INPUT, _szch_erdr_wrapper)],
             "szch_result": [MessageHandler(_TEXT_INPUT, _szch_result_wrapper)],
+            # Transfer states (integrated in single tree)
+            "transfer_formation": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_service_type": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_initiative": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_graduate_year": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_unit_type": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_unit_type_unknown": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_current_unit_duration": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_previous_transfer_gap": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_zsu_ground": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_dpsu_ground": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_position_level": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_rear_destination": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_combat_goal": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_recommendation_letter": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_medical_conclusion": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_family_circumstance": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_supporting_documents": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_officer_status": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_command_approval": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_command_health_obstacle": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_command_family_care_need": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
+            "transfer_result": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
             # Prydatnist states (integrated in single tree)
             "prydatnist_search_method": [MessageHandler(_TEXT_INPUT, _prydatnist_search_method_wrapper)],
             "prydatnist_keyword_input": [MessageHandler(_TEXT_INPUT, _prydatnist_keyword_input_wrapper)],
