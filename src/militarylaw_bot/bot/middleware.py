@@ -5,15 +5,15 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import BaseHandler, ContextTypes
 
-from militarylaw_bot.db import UserDatabase
+from militarylaw_bot.db import StatisticsTracker
 
 
 class UserTrackingHandler(BaseHandler):
     """Handler to track all user interactions."""
 
-    def __init__(self, user_db: UserDatabase):
+    def __init__(self, stats_tracker: StatisticsTracker):
         super().__init__(self.handle_update)
-        self.user_db = user_db
+        self.stats_tracker = stats_tracker
 
     def check_update(self, update: object) -> bool:
         """Always process every update."""
@@ -36,4 +36,4 @@ class UserTrackingHandler(BaseHandler):
 
         # Track all users
         if chat_id:
-            self.user_db.track_user(chat_id)
+            self.stats_tracker.track_user(chat_id)

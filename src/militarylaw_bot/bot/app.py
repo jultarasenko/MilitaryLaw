@@ -9,11 +9,11 @@ from telegram.ext import Application, PicklePersistence
 
 from militarylaw_bot.bot import handlers
 from militarylaw_bot.bot.commands import register_commands
-from militarylaw_bot.bot.command_stats import set_user_db as set_stats_db
+from militarylaw_bot.bot import command_stats
 from militarylaw_bot.bot.middleware import UserTrackingHandler
 from militarylaw_bot.bot.utils import get_data_path
 from militarylaw_bot.config import load_settings
-from militarylaw_bot.db import UserDatabase
+from militarylaw_bot.db import StatisticsTracker
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -39,15 +39,15 @@ def build_application() -> Application:
     )
     logger.info("✅ Application instance created")
 
-    # Initialize user database
-    db_path = str(get_data_path("users.json"))
-    user_db = UserDatabase(db_path=db_path)
-    handlers.set_user_db(user_db)
-    set_stats_db(user_db)
-    logger.info(f"✅ User database initialized: {db_path}")
+    # Initialize statistics tracker (user IDs stored as HMAC hashes)
+    stats_db_path = str(get_data_path("statistics.db"))
+    stats_tracker = StatisticsTracker(db_path=stats_db_path, secret_key=settings.stats_secret_key)
+    handlers.set_stats_tracker(stats_tracker)
+    command_stats.set_stats_tracker(stats_tracker)
+    logger.info(f"✅ Statistics tracker initialized: {stats_db_path}")
 
     # Add tracking handler first (group -1 runs before all others)
-    application.add_handler(UserTrackingHandler(user_db), group=-1)
+    application.add_handler(UserTrackingHandler(stats_tracker), group=-1)
     logger.info("✅ Tracking handler added")
 
     # Register all commands and handlers
