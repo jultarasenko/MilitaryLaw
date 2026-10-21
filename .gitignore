@@ -8,5 +8,6 @@ algorithm/
 .pytest_cache/
 .ruff_cache/
 data/users.json
+data/statistics.db
 *.pickle
 example/

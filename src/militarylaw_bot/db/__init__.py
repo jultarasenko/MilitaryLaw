@@ -1,5 +1,5 @@
 """Database module for user tracking and statistics."""
 
-from militarylaw_bot.db.users import UserDatabase
+from militarylaw_bot.db.statistics import StatisticsTracker
 
-__all__ = ["UserDatabase"]
+__all__ = ["StatisticsTracker"]

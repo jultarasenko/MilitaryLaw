@@ -17,6 +17,7 @@ class Settings:
     webhook_path: str
     webhook_secret: str | None
     admin_chat_ids: list[int]
+    stats_secret_key: str
 
 
 def load_settings() -> Settings:
@@ -38,6 +39,10 @@ def load_settings() -> Settings:
 
     admin_chat_ids = [int(chat_id.strip()) for chat_id in admin_chat_ids_str.split(",")]
 
+    stats_secret_key = os.environ.get("STATS_SECRET_KEY")
+    if not stats_secret_key:
+        raise RuntimeError("STATS_SECRET_KEY environment variable is not set")
+
     return Settings(
         bot_token=bot_token,
         persistence_path=os.environ.get("PERSISTENCE_PATH", "/app/data/bot_state.pickle"),
@@ -46,4 +51,5 @@ def load_settings() -> Settings:
         webhook_path=os.environ.get("WEBHOOK_PATH", "/militarylaw/webhook"),
         webhook_secret=webhook_secret,
         admin_chat_ids=admin_chat_ids,
+        stats_secret_key=stats_secret_key,
     )

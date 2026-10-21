@@ -11,33 +11,28 @@ from telegram.ext import ContextTypes
 from militarylaw_bot.bot import texts
 from militarylaw_bot.bot.global_session import get_session
 from militarylaw_bot.bot.unified_keyboards import build_main_menu_keyboard
-from militarylaw_bot.db import UserDatabase
+from militarylaw_bot.db import StatisticsTracker
 
 logger = logging.getLogger(__name__)
 
-_user_db: UserDatabase | None = None
+_stats_tracker: StatisticsTracker | None = None
 
 
-def set_user_db(user_db: UserDatabase) -> None:
-    """Set the global user database for tracking."""
-    global _user_db
-    _user_db = user_db
+def set_stats_tracker(stats_tracker: StatisticsTracker) -> None:
+    """Set the global statistics tracker."""
+    global _stats_tracker
+    _stats_tracker = stats_tracker
 
 
-def _track_user(update: Update) -> None:
-    """Track user interaction."""
-    if _user_db is None:
+def track_stats(user_id: int, command: str, action: str, step: str | None = None) -> None:
+    """Track user statistics."""
+    if _stats_tracker is None:
         return
-    if update.message and update.message.chat_id:
-        _user_db.track_user(update.message.chat_id)
-    elif update.callback_query and update.callback_query.message:
-        _user_db.track_user(update.callback_query.message.chat_id)
+    _stats_tracker.track_action(user_id, command, action, step)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command - show welcome message and main menu."""
-    _track_user(update)
-
     # Reset global session
     chat_id = update.effective_chat.id
     session = get_session(chat_id)

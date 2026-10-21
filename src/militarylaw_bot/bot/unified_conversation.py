@@ -16,6 +16,8 @@ from telegram.ext import (
 logger = logging.getLogger(__name__)
 
 from militarylaw_bot.bot import handlers, texts
+from militarylaw_bot.bot.handlers import track_stats
+from militarylaw_bot.db.statistics import TRACKED_COMMANDS
 from militarylaw_bot.bot.global_session import CommandType, get_session
 from militarylaw_bot.bot.unified_keyboards import (
     build_main_menu_keyboard,
@@ -102,6 +104,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         session.push_history()
         session.current_command = CommandType.VIDSTROCHKA
         session.step = "vidstrochka_gate_2022"
+        track_stats(chat_id, "vidstrochka", "started")
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
@@ -116,6 +119,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         session.push_history()
         session.current_command = CommandType.SZCH
         session.step = "szch_formation"
+        track_stats(chat_id, "szch", "started")
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         await update.message.reply_text(
@@ -130,6 +134,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         session.current_command = CommandType.TRANSFER
         session.step = "transfer_formation"
         session.push_history()
+        track_stats(chat_id, "transfer", "started")
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         from militarylaw_bot.bot.unified_keyboards import transfer_formation
@@ -145,6 +150,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         session.push_history()
         session.current_command = CommandType.PRYDATNIST
         session.step = "prydatnist_search_method"
+        track_stats(chat_id, "prydatnist", "started")
 
         await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
         text_msg = (
@@ -985,9 +991,34 @@ async def _reset_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return "menu"
 
 
+def _command_of(state) -> str | None:
+    """Map a conversation state like "szch_awol_date" to its command, if tracked."""
+    if not isinstance(state, str):
+        return None
+    command = state.split("_", 1)[0]
+    return command if command in TRACKED_COMMANDS else None
+
+
+def _track_progress(state: str | None, callback):
+    """Record back presses and completions (moving onto a result screen) around a callback."""
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+        chat_id = update.effective_chat.id
+        command = _command_of(state)
+        if command and update.message and (update.message.text or "").strip() == "← Назад":
+            track_stats(chat_id, command, "back_button", step=state)
+
+        new_state = await callback(update, context)
+
+        new_command = _command_of(new_state)
+        if new_command and new_state != state and new_state == f"{new_command}_result":
+            track_stats(chat_id, new_command, "completion")
+        return new_state
+    return wrapper
+
+
 def build_unified_conversation() -> ConversationHandler:
     """Build unified single-tree conversation for all commands."""
-    return ConversationHandler(
+    conversation = ConversationHandler(
         name="unified_conversation",
         persistent=False,
         entry_points=[
@@ -1060,3 +1091,9 @@ def build_unified_conversation() -> ConversationHandler:
             MessageHandler(filters.TEXT & ~filters.COMMAND, _enter_menu),
         ],
     )
+    for state, state_handlers in conversation.states.items():
+        for handler in state_handlers:
+            handler.callback = _track_progress(state, handler.callback)
+    for handler in [*conversation.entry_points, *conversation.fallbacks]:
+        handler.callback = _track_progress(None, handler.callback)
+    return conversation
