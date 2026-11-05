@@ -20,6 +20,8 @@ from militarylaw_bot.bot.handlers import track_stats
 from militarylaw_bot.db.statistics import TRACKED_COMMANDS
 from militarylaw_bot.bot.global_session import CommandType, get_session
 from militarylaw_bot.bot.unified_keyboards import (
+    VIDSTROCHKA_BUTTON,
+    VIDSTROCHKA_LEGACY_BUTTONS,
     build_main_menu_keyboard,
     vidstrochka_gate_2022,
     szch_formation,
@@ -56,33 +58,12 @@ from militarylaw_bot.bot.command_transfer import (
     handle_transfer_start,
     handle_transfer_generic,
 )
-from militarylaw_bot.bot.command_prydatnist_handlers import (
-    handle_prydatnist_start,
-    handle_prydatnist_search_method,
-    handle_prydatnist_keyword_input,
-    handle_prydatnist_search_results,
-    handle_prydatnist_groups,
-    handle_prydatnist_articles,
-    handle_prydatnist_points,
-    handle_prydatnist_result,
+from militarylaw_bot.bot.command_prydatnist import (
+    PRYDATNIST_STATES,
+    handle_prydatnist_step,
+    render_prydatnist_step,
+    start_prydatnist,
 )
-from militarylaw_bot.domain.suitability import SuitabilityDB
-from militarylaw_bot.bot.utils import get_db_path
-
-_suitability_db = None
-
-
-def _init_db():
-    """Initialize database on first use."""
-    global _suitability_db
-    if _suitability_db is None:
-        try:
-            db_path = get_db_path()
-            _suitability_db = SuitabilityDB(db_path)
-            logger.info(f"✅ SuitabilityDB initialized: {db_path}")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize SuitabilityDB: {e}")
-
 
 _TEXT_INPUT = filters.TEXT & ~filters.COMMAND
 
@@ -99,7 +80,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"Error in handle_menu_selection start: {e}", exc_info=True)
         raise
 
-    if text == "Відстрочка":
+    if text == VIDSTROCHKA_BUTTON or text in VIDSTROCHKA_LEGACY_BUTTONS:
         session.answers.clear()
         session.push_history()
         session.current_command = CommandType.VIDSTROCHKA
@@ -146,26 +127,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return "transfer_formation"
 
     elif text == "Придатність":
-        session.answers.clear()
-        session.push_history()
-        session.current_command = CommandType.PRYDATNIST
-        session.step = "prydatnist_search_method"
-        track_stats(chat_id, "prydatnist", "started")
-
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        text_msg = (
-            "🏥 <b>Оцінка придатності до військової служби</b>\n\n"
-            "Виберіть спосіб пошуку хвороби:\n\n"
-            "<i>Рекомендація: якщо у вас кілька хвороб, краще пройтись по кожній окремо.</i>"
-        )
-        from militarylaw_bot.bot.unified_keyboards import prydatnist_search_method
-        await update.message.reply_text(
-            text_msg,
-            reply_markup=prydatnist_search_method(),
-            parse_mode="HTML",
-        )
-        logger.info(f"Returning from handle_menu_selection: 'prydatnist_search_method'")
-        return "prydatnist_search_method"
+        return await start_prydatnist(update, context)
 
     else:
         logger.info(f"Unknown menu option, returning 'menu'")
@@ -198,8 +160,7 @@ async def _universal_back_handler(
             elif command == CommandType.TRANSFER:
                 return await _dispatch_transfer(update, context, session)
             elif command == CommandType.PRYDATNIST:
-                logger.info(f"Dispatching prydatnist for step: {step}")
-                return await _dispatch_prydatnist(update, context, session)
+                return await render_prydatnist_step(update, context, session)
 
         logger.info(f"No history to pop, returning current step: {session.step}")
         return session.step
@@ -552,106 +513,6 @@ async def _dispatch_transfer(
     return step
 
 
-async def _dispatch_prydatnist(
-    update: Update, context: ContextTypes.DEFAULT_TYPE, session
-) -> str:
-    """Re-render prydatnist step from history."""
-    from militarylaw_bot.bot.unified_keyboards import (
-        prydatnist_search_method,
-        prydatnist_groups_navigation,
-        prydatnist_articles_navigation,
-        prydatnist_points_navigation,
-        result_actions,
-    )
-
-    chat_id = update.effective_chat.id
-    step = session.step
-    logger.info(f"_dispatch_prydatnist called: step={step}, answers={session.answers}")
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-
-    if step == "prydatnist_search_method":
-        await update.message.reply_text(
-            "🏥 <b>Оцінка придатності до військової служби</b>\n\n"
-            "Виберіть спосіб пошуку хвороби:",
-            reply_markup=prydatnist_search_method(),
-            parse_mode="HTML",
-        )
-    elif step == "prydatnist_keyword_input":
-        await update.message.reply_text(
-            "🔍 <b>Введіть ключове слово хвороби</b>\n\nНаприклад: туберкульоз",
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-    elif step == "prydatnist_search_results":
-        articles = session.answers.get("search_results", [])
-        keyword = session.answers.get("search_keyword", "")
-        result_text = f"🔍 <b>Результати пошуку для \"{keyword}\":</b>\n\n"
-        for article in articles:
-            result_text += f"<b>Стаття {article.number}</b> - {article.keywords or 'Без опису'}\n\n"
-
-        from militarylaw_bot.bot.unified_keyboards import ReplyKeyboardMarkup, KeyboardButton
-        buttons = []
-        for article in articles:
-            buttons.append([KeyboardButton(f"Стаття {article.number}")])
-        buttons.append([
-            KeyboardButton("← Назад"),
-            KeyboardButton("↑ Меню")
-        ])
-        keyboard = ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
-
-        await update.message.reply_text(
-            result_text,
-            reply_markup=keyboard,
-            parse_mode="HTML",
-        )
-    elif step == "prydatnist_groups":
-        _init_db()
-        groups = _suitability_db.get_groups() if _suitability_db else []
-        text_msg = "📚 <b>Групи хвороб</b>\n\n"
-        for i, group in enumerate(groups, 1):
-            text_msg += f"{i}. {group.name}\n"
-        await update.message.reply_text(
-            text_msg,
-            reply_markup=prydatnist_groups_navigation(len(groups)),
-            parse_mode="HTML",
-        )
-    elif step == "prydatnist_articles":
-        articles = session.answers.get("group_articles", [])
-        text_msg = "📚 <b>Статті в групі</b>\n\n"
-        text_msg += f"Статей в групі: {len(articles)}\n\n"
-        text_msg += "Виберіть номер статті"
-        await update.message.reply_text(
-            text_msg,
-            reply_markup=prydatnist_articles_navigation(len(articles)),
-            parse_mode="HTML",
-        )
-    elif step == "prydatnist_points":
-        article_num = session.answers.get("selected_article")
-        _init_db()
-        article = _suitability_db.get_article(str(article_num)) if _suitability_db else None
-        if article and article.points:
-            text_msg = f"📋 <b>Стаття {article_num}</b>\n\n"
-            text_msg += f"{article.keywords or 'Без опису'}\n\n"
-            text_msg += "<b>Пункти:</b>\n\n"
-            for i, point in enumerate(article.points):
-                letter = chr(ord('а') + i)
-                text_msg += f"<b>{letter})</b> {point.description}\n\n"
-            await update.message.reply_text(
-                text_msg,
-                reply_markup=prydatnist_points_navigation(len(article.points)),
-                parse_mode="HTML",
-            )
-    elif step == "prydatnist_result":
-        prev_step = session.get_previous_step()
-        if prev_step and prev_step != "prydatnist_result":
-            session.step = prev_step
-            return await _dispatch_prydatnist(update, context, session)
-        return "prydatnist_result"
-
-    return step
-
-
 async def _check_navigation_and_dispatch(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
@@ -871,70 +732,14 @@ async def _szch_result_wrapper(
     return await handle_szch_result(update, context)
 
 
-async def _prydatnist_search_method_wrapper(
+async def _prydatnist_wrapper(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
+    """Wrapper for all prydatnist states - check navigation first."""
     nav = await _check_navigation_and_dispatch(update, context)
     if nav is not None:
         return nav
-    return await handle_prydatnist_search_method(update, context)
-
-
-async def _prydatnist_keyword_input_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    text = update.message.text.strip() if update.message else ""
-    logger.info(f"_prydatnist_keyword_input_wrapper: text='{text}'")
-    nav = await _check_navigation_and_dispatch(update, context)
-    logger.info(f"_prydatnist_keyword_input_wrapper: nav={nav}")
-    if nav is not None:
-        return nav
-    return await handle_prydatnist_keyword_input(update, context)
-
-
-async def _prydatnist_search_results_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_prydatnist_search_results(update, context)
-
-
-async def _prydatnist_groups_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_prydatnist_groups(update, context)
-
-
-async def _prydatnist_articles_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_prydatnist_articles(update, context)
-
-
-async def _prydatnist_points_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_prydatnist_points(update, context)
-
-
-async def _prydatnist_result_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_prydatnist_result(update, context)
+    return await handle_prydatnist_step(update, context)
 
 
 # Transfer wrappers
@@ -1023,6 +828,7 @@ def build_unified_conversation() -> ConversationHandler:
         persistent=False,
         entry_points=[
             CommandHandler("start", _start_handler),
+            CommandHandler("prydatnist", start_prydatnist),
             MessageHandler(filters.TEXT & ~filters.COMMAND, _enter_menu),
         ],
         states={
@@ -1078,16 +884,14 @@ def build_unified_conversation() -> ConversationHandler:
             "transfer_command_family_care_need": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
             "transfer_result": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
             # Prydatnist states (integrated in single tree)
-            "prydatnist_search_method": [MessageHandler(_TEXT_INPUT, _prydatnist_search_method_wrapper)],
-            "prydatnist_keyword_input": [MessageHandler(_TEXT_INPUT, _prydatnist_keyword_input_wrapper)],
-            "prydatnist_search_results": [MessageHandler(_TEXT_INPUT, _prydatnist_search_results_wrapper)],
-            "prydatnist_groups": [MessageHandler(_TEXT_INPUT, _prydatnist_groups_wrapper)],
-            "prydatnist_articles": [MessageHandler(_TEXT_INPUT, _prydatnist_articles_wrapper)],
-            "prydatnist_points": [MessageHandler(_TEXT_INPUT, _prydatnist_points_wrapper)],
-            "prydatnist_result": [MessageHandler(_TEXT_INPUT, _prydatnist_result_wrapper)],
+            **{
+                state: [MessageHandler(_TEXT_INPUT, _prydatnist_wrapper)]
+                for state in PRYDATNIST_STATES
+            },
         },
         fallbacks=[
             CommandHandler("start", _start_handler),
+            CommandHandler("prydatnist", start_prydatnist),
             MessageHandler(filters.TEXT & ~filters.COMMAND, _enter_menu),
         ],
     )
