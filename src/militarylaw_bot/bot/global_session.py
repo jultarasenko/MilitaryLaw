@@ -9,7 +9,7 @@ from enum import Enum
 class CommandType(str, Enum):
     """Available bot commands."""
     VIDSTROCHKA = "vidstrochka"
-    # PRYDATNIST = "prydatnist"
+    PRYDATNIST = "prydatnist"
     SZCH = "szch"
     TRANSFER = "transfer"
 

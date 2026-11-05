@@ -16,11 +16,16 @@ def build_options_keyboard(options: list[str]) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True)
 
 
+VIDSTROCHKA_BUTTON = "Відстрочка після звільнення у зв'язку із закінченням контракту"
+# Earlier labels that may still be on users' persistent menu keyboards
+VIDSTROCHKA_LEGACY_BUTTONS = ("Відстрочка", "Відстрочка після звільнення по закінченню контракту")
+
+
 def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
     """Build main menu keyboard for command selection."""
     buttons = [
-        [KeyboardButton("Відстрочка після звільнення по закінченню контракту")],
-        # [KeyboardButton("Придатність")],
+        [KeyboardButton(VIDSTROCHKA_BUTTON)],
+        [KeyboardButton("Придатність")],
         [KeyboardButton("СЗЧ")],
         [KeyboardButton("Переведення")],
     ]
@@ -198,63 +203,20 @@ def prydatnist_search_method() -> ReplyKeyboardMarkup:
     ])
 
 
-def prydatnist_groups_navigation(group_count: int) -> ReplyKeyboardMarkup:
-    """Keyboard for navigating disease groups."""
+def build_grid_keyboard(options: list[str], per_row: int) -> ReplyKeyboardMarkup:
+    """Reply keyboard with options laid out per_row in a row, plus navigation buttons."""
     buttons = [
-        [KeyboardButton(f"{i+1}") for i in range(min(5, group_count))]
+        [KeyboardButton(opt) for opt in options[i:i + per_row]]
+        for i in range(0, len(options), per_row)
     ]
-    # Add navigation
-    buttons.append([
-        KeyboardButton("← Назад"),
-        KeyboardButton("↑ Меню")
-    ])
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
-
-
-def prydatnist_articles_navigation(article_count: int) -> ReplyKeyboardMarkup:
-    """Keyboard for navigating articles in group."""
-    buttons = []
-    for i in range(0, article_count, 2):
-        row = [KeyboardButton(str(i+1))]
-        if i+1 < article_count:
-            row.append(KeyboardButton(str(i+2)))
-        buttons.append(row)
-
-    # Add navigation
-    buttons.append([
-        KeyboardButton("← Назад"),
-        KeyboardButton("↑ Меню")
-    ])
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
-
-
-def prydatnist_points_navigation(point_count: int) -> ReplyKeyboardMarkup:
-    """Keyboard for selecting points."""
-    buttons = []
-    for point in range(point_count):
-        letter = chr(97 + point)  # a, b, c, etc.
-        buttons.append([KeyboardButton(letter.upper())])
-
-    # Add navigation
-    buttons.append([
-        KeyboardButton("← Назад"),
-        KeyboardButton("↑ Меню")
-    ])
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
-
-
-def prydatnist_units_selection() -> ReplyKeyboardMarkup:
-    """Keyboard for unit selection."""
-    buttons = [
-        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
-    ]
+    buttons.append([KeyboardButton("← Назад"), KeyboardButton("↑ Меню")])
     return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
 
 
 def prydatnist_result_actions() -> ReplyKeyboardMarkup:
     """Reply keyboard for result with option to start new search."""
     buttons = [
-        [KeyboardButton("🔍 Нов пошук")],
+        [KeyboardButton("🔍 Новий пошук")],
         [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
     ]
     return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
