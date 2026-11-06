@@ -89,21 +89,22 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     elif text == "СЗЧ":
         return await start_szch(update, context)
 
-    elif text == "Переведення":
-        session.answers.clear()
-        session.current_command = CommandType.TRANSFER
-        session.step = "transfer_formation"
-        session.push_history()
-        track_stats(chat_id, "transfer", "started")
-
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        from militarylaw_bot.bot.unified_keyboards import transfer_formation
-        await update.message.reply_text(
-            texts.TRANSFER_FORMATION_QUESTION,
-            reply_markup=transfer_formation(),
-            parse_mode="HTML",
-        )
-        return "transfer_formation"
+    # Переведення is temporarily hidden from the menu
+    # elif text == "Переведення":
+    #     session.answers.clear()
+    #     session.current_command = CommandType.TRANSFER
+    #     session.step = "transfer_formation"
+    #     session.push_history()
+    #     track_stats(chat_id, "transfer", "started")
+    #
+    #     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+    #     from militarylaw_bot.bot.unified_keyboards import transfer_formation
+    #     await update.message.reply_text(
+    #         texts.TRANSFER_FORMATION_QUESTION,
+    #         reply_markup=transfer_formation(),
+    #         parse_mode="HTML",
+    #     )
+    #     return "transfer_formation"
 
     elif text == "Придатність":
         return await start_prydatnist(update, context)
