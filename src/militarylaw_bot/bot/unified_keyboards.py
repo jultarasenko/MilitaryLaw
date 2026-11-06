@@ -131,72 +131,8 @@ def result_actions_with_contract() -> ReplyKeyboardMarkup:
 
 
 # Szch keyboards
-def szch_formation() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "ЗСУ",
-        "НГУ",
-        "ДПСУ",
-        "ДССТ",
-    ])
-
-
-def szch_yes_no() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "Так",
-        "Ні",
-    ])
-
-
-def szch_awol_date() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "До 12.06.2026 включно",
-        "З 13.06.2026",
-        "Не знаю",
-    ])
-
-
-def szch_return_type() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "Спрощений порядок повернення",
-        "Загальний порядок повернення",
-    ])
-
-
-def szch_zsu_submission() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "Через додаток Армія+",
-        "Через центр рекрутингу",
-        "Безпосередньо до обраної військової частини",
-    ])
-
-
-def szch_dsst_submission() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "Через додаток Армія+",
-        "Безпосередньо до обраної військової частини",
-    ])
-
-
-def szch_general_arrival() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "До своєї військової частини",
-        "До ВСП",
-        "До ДБР",
-        "До ТЦК та СП",
-        "До іншої військової частини / органу військового управління",
-    ])
-
-
-def szch_yes_no_unknown() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "Так",
-        "Ні",
-        "Не знаю",
-    ])
-
-
-def szch_consent() -> ReplyKeyboardMarkup:
-    return szch_yes_no_unknown()
+def szch_first_time() -> ReplyKeyboardMarkup:
+    return build_options_keyboard(["Так, вперше", "Ні, не вперше"])
 
 
 # Prydatnist keyboards

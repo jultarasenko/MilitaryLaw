@@ -24,9 +24,6 @@ from militarylaw_bot.bot.unified_keyboards import (
     VIDSTROCHKA_LEGACY_BUTTONS,
     build_main_menu_keyboard,
     vidstrochka_gate_2022,
-    szch_formation,
-    szch_yes_no_unknown,
-    szch_return_type,
 )
 from militarylaw_bot.bot.command_vidstrochka import (
     handle_vidstrochka_gate_2022,
@@ -43,16 +40,10 @@ from militarylaw_bot.bot.command_vidstrochka import (
     handle_vidstrochka_result,
 )
 from militarylaw_bot.bot.command_szch import (
-    handle_szch_formation,
-    handle_szch_want_return,
-    handle_szch_first_time_awol,
-    handle_szch_awol_date,
-    handle_szch_return_type,
-    handle_szch_simplified_submission,
-    handle_szch_general_arrival,
-    handle_szch_commander_consent,
-    handle_szch_erdr,
+    handle_szch_first_time,
     handle_szch_result,
+    show_szch_first_time,
+    start_szch,
 )
 from militarylaw_bot.bot.command_transfer import (
     handle_transfer_start,
@@ -96,19 +87,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return "vidstrochka_gate_2022"
 
     elif text == "СЗЧ":
-        session.answers.clear()
-        session.push_history()
-        session.current_command = CommandType.SZCH
-        session.step = "szch_formation"
-        track_stats(chat_id, "szch", "started")
-
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.SZCH_FORMATION_QUESTION,
-            reply_markup=szch_formation(),
-            parse_mode="HTML",
-        )
-        return "szch_formation"
+        return await start_szch(update, context)
 
     elif text == "Переведення":
         session.answers.clear()
@@ -276,86 +255,9 @@ async def _dispatch_szch(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session
 ) -> str:
     """Re-render SZCH step from history - just show the screen, don't process input."""
-    from militarylaw_bot.bot.unified_keyboards import szch_formation, szch_yes_no, szch_awol_date, szch_return_type, szch_zsu_submission, szch_dsst_submission, szch_general_arrival, szch_consent, text_input_keyboard, result_actions
-
-    chat_id = update.effective_chat.id
-    step = session.step
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-
-    if step == "szch_formation":
-        await update.message.reply_text(
-            texts.SZCH_FORMATION_QUESTION,
-            reply_markup=szch_formation(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_want_return":
-        await update.message.reply_text(
-            texts.SZCH_WANT_RETURN,
-            reply_markup=szch_yes_no(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_first_time_awol":
-        await update.message.reply_text(
-            texts.SZCH_FIRST_TIME_AWOL,
-            reply_markup=szch_yes_no(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_awol_date":
-        await update.message.reply_text(
-            texts.SZCH_AWOL_DATE,
-            reply_markup=szch_awol_date(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_return_type":
-        await update.message.reply_text(
-            texts.SZCH_RETURN_TYPE,
-            reply_markup=szch_return_type(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_simplified_submission":
-        formation = session.answers.get("formation")
-        if formation == "ЗСУ":
-            keyboard = szch_zsu_submission()
-            prompt_text = texts.SZCH_ZSU_SIMPLIFIED_SUBMISSION
-        elif formation == "ДССТ":
-            keyboard = szch_dsst_submission()
-            prompt_text = texts.SZCH_DSST_SIMPLIFIED_SUBMISSION
-        else:
-            keyboard = szch_zsu_submission()
-            prompt_text = texts.SZCH_ZSU_SIMPLIFIED_SUBMISSION
-        await update.message.reply_text(
-            prompt_text,
-            reply_markup=keyboard,
-            parse_mode="HTML",
-        )
-    elif step == "szch_general_arrival":
-        await update.message.reply_text(
-            texts.SZCH_GENERAL_ARRIVAL,
-            reply_markup=szch_general_arrival(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_commander_consent":
-        await update.message.reply_text(
-            texts.SZCH_COMMANDER_CONSENT,
-            reply_markup=szch_consent(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_erdr":
-        await update.message.reply_text(
-            texts.SZCH_ERDR_QUESTION,
-            reply_markup=szch_yes_no_unknown(),
-            parse_mode="HTML",
-        )
-    elif step == "szch_result":
-        # Result is a leaf node - show last question instead
-        prev_step = session.get_previous_step()
-        if prev_step and prev_step != "szch_result":
-            session.step = prev_step
-            return await _dispatch_szch(update, context, session)
-        return "szch_result"
-
-    return step
+    # The only screen before the result is the first question
+    session.step = "szch_first_time"
+    return await show_szch_first_time(update, context)
 
 
 async def _dispatch_transfer(
@@ -642,85 +544,13 @@ async def _vidstrochka_result_wrapper(
 
 
 # SZCH wrappers
-async def _szch_formation_wrapper(
+async def _szch_first_time_wrapper(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
     nav = await _check_navigation_and_dispatch(update, context)
     if nav is not None:
         return nav
-    return await handle_szch_formation(update, context)
-
-
-async def _szch_want_return_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_want_return(update, context)
-
-
-async def _szch_first_time_awol_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_first_time_awol(update, context)
-
-
-async def _szch_awol_date_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_awol_date(update, context)
-
-
-async def _szch_return_type_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_return_type(update, context)
-
-
-async def _szch_simplified_submission_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_simplified_submission(update, context)
-
-
-async def _szch_general_arrival_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_general_arrival(update, context)
-
-
-async def _szch_commander_consent_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_commander_consent(update, context)
-
-
-async def _szch_erdr_wrapper(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> str:
-    nav = await _check_navigation_and_dispatch(update, context)
-    if nav is not None:
-        return nav
-    return await handle_szch_erdr(update, context)
+    return await handle_szch_first_time(update, context)
 
 
 async def _szch_result_wrapper(
@@ -797,7 +627,7 @@ async def _reset_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def _command_of(state) -> str | None:
-    """Map a conversation state like "szch_awol_date" to its command, if tracked."""
+    """Map a conversation state like "szch_first_time" to its command, if tracked."""
     if not isinstance(state, str):
         return None
     command = state.split("_", 1)[0]
@@ -850,15 +680,7 @@ def build_unified_conversation() -> ConversationHandler:
             "vidstrochka_service_before_2022": [MessageHandler(_TEXT_INPUT, _vidstrochka_service_before_2022_wrapper)],
             "vidstrochka_result": [MessageHandler(_TEXT_INPUT, _vidstrochka_result_wrapper)],
             # SZCH states (integrated in single tree)
-            "szch_formation": [MessageHandler(_TEXT_INPUT, _szch_formation_wrapper)],
-            "szch_want_return": [MessageHandler(_TEXT_INPUT, _szch_want_return_wrapper)],
-            "szch_first_time_awol": [MessageHandler(_TEXT_INPUT, _szch_first_time_awol_wrapper)],
-            "szch_awol_date": [MessageHandler(_TEXT_INPUT, _szch_awol_date_wrapper)],
-            "szch_return_type": [MessageHandler(_TEXT_INPUT, _szch_return_type_wrapper)],
-            "szch_simplified_submission": [MessageHandler(_TEXT_INPUT, _szch_simplified_submission_wrapper)],
-            "szch_general_arrival": [MessageHandler(_TEXT_INPUT, _szch_general_arrival_wrapper)],
-            "szch_commander_consent": [MessageHandler(_TEXT_INPUT, _szch_commander_consent_wrapper)],
-            "szch_erdr": [MessageHandler(_TEXT_INPUT, _szch_erdr_wrapper)],
+            "szch_first_time": [MessageHandler(_TEXT_INPUT, _szch_first_time_wrapper)],
             "szch_result": [MessageHandler(_TEXT_INPUT, _szch_result_wrapper)],
             # Transfer states (integrated in single tree)
             "transfer_formation": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],
