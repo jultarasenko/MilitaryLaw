@@ -11,7 +11,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-TRACKED_COMMANDS = ("vidstrochka", "szch", "transfer", "prydatnist")
+# "transfer" is left out while Переведення is hidden from the menu
+TRACKED_COMMANDS = ("vidstrochka", "szch", "prydatnist")
 
 
 def _days_ago(days: int) -> str:
@@ -137,13 +138,14 @@ class StatisticsTracker:
 
     def get_commands_per_user(self, action: str) -> dict[int, int]:
         """How many users did action ("started"/"completion") in exactly N different commands."""
+        placeholders = ", ".join("?" for _ in TRACKED_COMMANDS)
         with sqlite3.connect(self.db_path) as conn:
             rows = conn.execute(
                 "SELECT n, COUNT(*) FROM ("
                 "  SELECT COUNT(DISTINCT command) AS n FROM stat_events"
-                "  WHERE action = ? GROUP BY user_hash"
+                f"  WHERE action = ? AND command IN ({placeholders}) GROUP BY user_hash"
                 ") GROUP BY n",
-                (action,),
+                (action, *TRACKED_COMMANDS),
             ).fetchall()
         counts = dict(rows)
         return {n: counts.get(n, 0) for n in range(1, len(TRACKED_COMMANDS) + 1)}

@@ -27,7 +27,7 @@ def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton(VIDSTROCHKA_BUTTON)],
         [KeyboardButton("Придатність")],
         [KeyboardButton("СЗЧ")],
-        [KeyboardButton("Переведення")],
+        # [KeyboardButton("Переведення")],  # temporarily hidden
     ]
     return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
 
