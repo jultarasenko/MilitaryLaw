@@ -1,310 +1,76 @@
-"""СЗЧ (Служба без дозволу) command implementation."""
+"""СЗЧ (самовільне залишення частини) command implementation."""
 
 from __future__ import annotations
 
 import logging
+
 from telegram import Update
 from telegram.constants import ChatAction
 from telegram.ext import ContextTypes
 
 from militarylaw_bot.bot import texts
 from militarylaw_bot.bot.global_session import CommandType, get_session
-from militarylaw_bot.bot.unified_keyboards import (
-    szch_formation, szch_yes_no, szch_awol_date,
-    szch_return_type, szch_zsu_submission, szch_dsst_submission,
-    szch_general_arrival, szch_consent, szch_yes_no_unknown, text_input_keyboard,
-    result_actions,
-)
+from militarylaw_bot.bot.handlers import track_stats
+from militarylaw_bot.bot.unified_keyboards import result_actions, szch_first_time
 
 logger = logging.getLogger(__name__)
 
+FIRST_TIME = "Так, вперше"
+NOT_FIRST_TIME = "Ні, не вперше"
 
 
-
-
-
-async def handle_szch_formation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle formation selection."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-    text = update.message.text.strip()
-    valid_options = ["ЗСУ", "НГУ", "ДПСУ", "ДССТ"]
-    if text not in valid_options:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
-        return "szch_formation"
-
-    session.answers["formation"] = text
-    session.push_history()
-    session.step = "szch_want_return"
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+async def show_szch_first_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Show the only SZCH question."""
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
     await update.message.reply_text(
-        texts.SZCH_WANT_RETURN,
-        reply_markup=szch_yes_no(),
+        texts.SZCH_FIRST_TIME_QUESTION,
+        reply_markup=szch_first_time(),
         parse_mode="HTML",
     )
-    return "szch_want_return"
+    return "szch_first_time"
 
 
-async def handle_szch_want_return(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle 'do you want to return' question."""
+async def start_szch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Start SZCH from the main menu."""
+    chat_id = update.effective_chat.id
+    session = get_session(chat_id)
+    session.answers.clear()
+    session.push_history()
+    session.current_command = CommandType.SZCH
+    session.step = "szch_first_time"
+    track_stats(chat_id, "szch", "started")
+    return await show_szch_first_time(update, context)
+
+
+async def handle_szch_first_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Handle 'first SZCH or desertion under martial law' question."""
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
     text = update.message.text.strip()
-    if text not in ["Так", "Ні"]:
-        await update.message.reply_text("❌ Виберіть Так або Ні")
-        return "szch_want_return"
 
-    session.answers["want_return"] = text
-    session.push_history()
-
-    if text == "Ні":
-        session.step = "szch_result"
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.with_szch_closing_note(texts.SZCH_NOT_APPLICABLE_RESULT),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "szch_result"
-
-    session.step = "szch_first_time_awol"
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.SZCH_FIRST_TIME_AWOL,
-        reply_markup=szch_yes_no(),
-        parse_mode="HTML",
-    )
-    return "szch_first_time_awol"
-
-
-async def handle_szch_first_time_awol(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle 'is this first AWOL' question."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    if text not in ["Так", "Ні"]:
-        await update.message.reply_text("❌ Виберіть Так або Ні")
-        return "szch_first_time_awol"
-
-    session.answers["first_time_awol"] = text
-    session.push_history()
-
-    if text == "Ні":
-        session.step = "szch_result"
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.with_szch_closing_note(texts.SZCH_FIRST_TIME_REQUIRED),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "szch_result"
-
-    session.step = "szch_awol_date"
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.SZCH_AWOL_DATE,
-        reply_markup=szch_awol_date(),
-        parse_mode="HTML",
-    )
-    return "szch_awol_date"
-
-
-async def handle_szch_awol_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle AWOL start date."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    valid_options = ["До 12.06.2026 включно", "З 13.06.2026", "Не знаю"]
-    if text not in valid_options:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
-        return "szch_awol_date"
-
-    session.answers["awol_date"] = text
-    session.push_history()
-
-    if text == "Не знаю":
-        session.step = "szch_result"
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.with_szch_closing_note(texts.SZCH_NEED_DATE),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "szch_result"
-
-    if text == "З 13.06.2026":
-        session.answers["return_type"] = "Загальний порядок повернення"
-        session.step = "szch_general_arrival"
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.SZCH_GENERAL_ARRIVAL,
-            reply_markup=szch_general_arrival(),
-            parse_mode="HTML",
-        )
-        return "szch_general_arrival"
-
-    session.step = "szch_return_type"
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.SZCH_RETURN_TYPE,
-        reply_markup=szch_return_type(),
-        parse_mode="HTML",
-    )
-    return "szch_return_type"
-
-
-async def handle_szch_return_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle return type choice (simplified or general)."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    valid_options = ["Спрощений порядок повернення", "Загальний порядок повернення"]
-    if text not in valid_options:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
-        return "szch_return_type"
-
-    session.answers["return_type"] = text
-    session.push_history()
-
-    if text == "Загальний порядок повернення":
-        session.step = "szch_general_arrival"
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.SZCH_GENERAL_ARRIVAL,
-            reply_markup=szch_general_arrival(),
-            parse_mode="HTML",
-        )
-        return "szch_general_arrival"
-
-    formation = session.answers.get("formation", "")
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-
-    if formation == "ДПСУ":
-        session.step = "szch_result"
-        await update.message.reply_text(
-            texts.with_szch_closing_note(texts.SZCH_DPSU_SIMPLIFIED_UNAVAILABLE),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "szch_result"
-
-    if formation == "НГУ":
-        session.step = "szch_erdr"
-        await update.message.reply_text(
-            texts.SZCH_ERDR_QUESTION,
-            reply_markup=szch_yes_no_unknown(),
-            parse_mode="HTML",
-        )
-        return "szch_erdr"
-
-    session.step = "szch_simplified_submission"
-    if formation == "ДССТ":
-        keyboard = szch_dsst_submission()
+    if text == FIRST_TIME:
+        parts = list(texts.SZCH_FIRST_TIME_RESULT)
+    elif text == NOT_FIRST_TIME:
+        parts = [texts.SZCH_NOT_FIRST_TIME_RESULT]
     else:
-        keyboard = szch_zsu_submission()
-
-    await update.message.reply_text(
-        texts.SZCH_ZSU_SIMPLIFIED_SUBMISSION,
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
-    return "szch_simplified_submission"
-
-
-async def handle_szch_simplified_submission(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle simplified submission method."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    session.answers["submission_method"] = text
-    session.push_history()
-    session.step = "szch_erdr"
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.SZCH_ERDR_QUESTION,
-        reply_markup=szch_yes_no_unknown(),
-        parse_mode="HTML",
-    )
-    return "szch_erdr"
-
-
-async def handle_szch_erdr(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle ERDR question and generate final result."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    if text not in ["Так", "Ні", "Не знаю"]:
         await update.message.reply_text("❌ Виберіть один з варіантів")
-        return "szch_erdr"
+        return "szch_first_time"
 
-    session.answers["erdr"] = text
+    session.answers["first_time"] = text
     session.push_history()
     session.step = "szch_result"
-
-    return_type = session.answers.get("return_type", "")
-
-    if return_type == "Спрощений порядок повернення":
-        result_text = texts.build_szch_simplified_result(session.answers)
-    else:
-        result_text = texts.build_szch_general_result(session.answers)
+    parts[0] = texts.SZCH_RESULT_HEADER + parts[0]
+    parts[-1] += texts.CLOSING_NOTE
 
     await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        result_text,
-        reply_markup=result_actions(),
-        parse_mode="HTML",
-    )
+    for i, part in enumerate(parts):
+        is_last = i == len(parts) - 1
+        await update.message.reply_text(
+            part,
+            reply_markup=result_actions() if is_last else None,
+            parse_mode="HTML",
+        )
     return "szch_result"
-
-
-async def handle_szch_general_arrival(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle general arrival location."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    session.answers["arrival_location"] = text
-    session.push_history()
-    session.step = "szch_commander_consent"
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.SZCH_COMMANDER_CONSENT,
-        reply_markup=szch_consent(),
-        parse_mode="HTML",
-    )
-    return "szch_commander_consent"
-
-
-async def handle_szch_commander_consent(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Handle commander consent question."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-
-    text = update.message.text.strip()
-    if text not in ["Так", "Ні", "Не знаю"]:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
-        return "szch_commander_consent"
-
-    session.answers["commander_consent"] = text
-    session.push_history()
-    session.step = "szch_erdr"
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.SZCH_ERDR_QUESTION,
-        reply_markup=szch_yes_no_unknown(),
-        parse_mode="HTML",
-    )
-    return "szch_erdr"
 
 
 async def handle_szch_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
