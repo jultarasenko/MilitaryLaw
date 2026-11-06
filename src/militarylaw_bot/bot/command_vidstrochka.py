@@ -18,12 +18,28 @@ from militarylaw_bot.bot.unified_keyboards import (
     vidstrochka_age_at_signing,
     vidstrochka_contract_term,
     vidstrochka_discharged_before_768,
+    vidstrochka_registration_question,
     text_input_keyboard,
     result_actions,
     result_actions_with_contract,
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _send_deferral_result(update: Update, context: ContextTypes.DEFAULT_TYPE, session, result_text: str) -> str:
+    """Send a result that grants a deferral and offer info on how to register it."""
+    session.step = "vidstrochka_result"
+    # Set after push_history so going back drops it
+    session.answers["has_deferral"] = True
+    await context.bot.send_chat_action(update.effective_chat.id, ChatAction.TYPING)
+    await update.message.reply_text(texts.with_closing_note(result_text), parse_mode="HTML")
+    await update.message.reply_text(
+        texts.REGISTRATION_QUESTION,
+        reply_markup=vidstrochka_registration_question(),
+        parse_mode="HTML",
+    )
+    return "vidstrochka_result"
 
 
 def calculate_deferral_153_detailed(answers: dict) -> str:
@@ -378,14 +394,7 @@ async def handle_vidstrochka_contract_term(update: Update, context: ContextTypes
     if text == "1 рік":
         session.answers["contract_term"] = "1_year"
         session.push_history()
-        session.step = "vidstrochka_result"
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.with_closing_note(texts.TWELVE_MONTHS_AFTER_DISCHARGE),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "vidstrochka_result"
+        return await _send_deferral_result(update, context, session, texts.TWELVE_MONTHS_AFTER_DISCHARGE)
 
     elif text == "Більше 1 року":
         session.answers["contract_term"] = "more_than_1_year"
@@ -465,16 +474,8 @@ async def handle_vidstrochka_combat_periods(update: Update, context: ContextType
     # Check if this is KMU 153 (age 25+, not discharged before 768)
     # For KMU 153: just calculate result
     if session.answers.get("discharged_before_768") == "no":
-        session.step = "vidstrochka_result"
         result_text = calculate_deferral_153_detailed(session.answers)
-
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.with_closing_note(result_text),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "vidstrochka_result"
+        return await _send_deferral_result(update, context, session, result_text)
 
     # Ask only relevant questions based on term:
     # 6 месяцев (A+Б): только боевые периоды, потом результат
@@ -484,16 +485,8 @@ async def handle_vidstrochka_combat_periods(update: Update, context: ContextType
 
     if term_768 == "6_months":
         # 6 месяцев: go to result (only need A + Б which we have)
-        session.step = "vidstrochka_result"
         result_text = calculate_deferral_768_detailed(session.answers)
-
-        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-        await update.message.reply_text(
-            texts.with_closing_note(result_text),
-            reply_markup=result_actions(),
-            parse_mode="HTML",
-        )
-        return "vidstrochka_result"
+        return await _send_deferral_result(update, context, session, result_text)
 
     elif term_768 == "10_months":
         # 10 месяцев: ask service_since_2022
@@ -555,18 +548,10 @@ async def handle_vidstrochka_service_before_2022(update: Update, context: Contex
 
     session.answers["service_before_2022"] = int(text)
     session.push_history()
-    session.step = "vidstrochka_result"
 
     # Calculate deferral period for KMU 768
     result_text = calculate_deferral_768_detailed(session.answers)
-
-    await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
-    await update.message.reply_text(
-        texts.with_closing_note(result_text),
-        reply_markup=result_actions(),
-        parse_mode="HTML",
-    )
-    return "vidstrochka_result"
+    return await _send_deferral_result(update, context, session, result_text)
 
 
 async def handle_vidstrochka_result(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -591,6 +576,23 @@ async def handle_vidstrochka_result(update: Update, context: ContextTypes.DEFAUL
             parse_mode="HTML",
         )
         return "vidstrochka_contract_type"
+
+    if session.answers.get("has_deferral") and text == "Так":
+        if session.answers.get("contract_term") == "1_year":
+            info = texts.REGISTRATION_ONE_YEAR_CONTRACT
+        else:
+            info = texts.REGISTRATION_GENERAL
+        await context.bot.send_chat_action(chat_id, ChatAction.TYPING)
+        await update.message.reply_text(
+            info,
+            reply_markup=result_actions(),
+            parse_mode="HTML",
+        )
+        return "vidstrochka_result"
+
+    if session.answers.get("has_deferral") and text == "Ні":
+        from militarylaw_bot.bot.unified_conversation import _reset_to_menu
+        return await _reset_to_menu(update, context)
 
     # Otherwise just stay on result
     return "vidstrochka_result"

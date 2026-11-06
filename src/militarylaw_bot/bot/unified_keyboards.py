@@ -117,6 +117,10 @@ def result_actions() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
 
 
+def vidstrochka_registration_question() -> ReplyKeyboardMarkup:
+    return build_options_keyboard(["Так", "Ні"])
+
+
 def result_actions_with_contract() -> ReplyKeyboardMarkup:
     """Reply keyboard for planning contract result with option to select contract."""
     buttons = [
