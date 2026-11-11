@@ -215,7 +215,6 @@ def _screen_point(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
 
 
 def _screen_result(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
-    db = _get_db()
     number, letter = answers["article_number"], answers.get("point_letter")
     point = _find_point(number, letter)
 
@@ -226,19 +225,6 @@ def _screen_result(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
     else:
         text += "❓ Немає даних для цього діагнозу\n"
     text += f"\n{texts.PRYDATNIST_DISCLAIMER}"
-
-    requirements = db.get_requirements(number, letter)
-    if requirements:
-        units = {u.column_number: u.name for u in db.get_military_units()}
-        text += "\n\n<b>Обмеження за військовими спеціалізаціями (Додаток 3):</b>\n"
-        for req in requirements:
-            unit = _esc(units.get(req.military_unit_column, f"Колонка {req.military_unit_column}"))
-            if req.requirement == "НП":
-                text += f"\n❌ {unit} — <b>непридатний</b>\n"
-            else:
-                text += f"\n⚠️ {unit} — <b>{_esc(req.requirement)}</b>\n"
-        text += "\n<i>Для інших спеціалізацій діє загальний висновок.</i>"
-
     text += f"\n\n{texts.PRYDATNIST_NEW_SEARCH_HINT}"
     text += texts.CLOSING_NOTE
     return text, build_grid_keyboard([NEW_SEARCH_BUTTON], per_row=1)
