@@ -112,7 +112,11 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
 
     else:
         logger.info(f"Unknown menu option, returning 'menu'")
-        await update.message.reply_text("❌ Невпізнана команда. Виберіть один з варіантів.")
+        await update.message.reply_text(
+            texts.INVALID_MENU_CHOICE,
+            reply_markup=build_main_menu_keyboard(),
+            parse_mode="HTML",
+        )
         return "menu"
 
 

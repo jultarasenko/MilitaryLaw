@@ -27,6 +27,17 @@ from militarylaw_bot.bot.unified_keyboards import (
 logger = logging.getLogger(__name__)
 
 
+async def _invalid_choice(update: Update, keyboard) -> None:
+    """Explain that a button is expected and show the buttons again."""
+    await update.message.reply_text(texts.INVALID_CHOICE, reply_markup=keyboard, parse_mode="HTML")
+
+
+async def _invalid_number(update: Update) -> None:
+    await update.message.reply_text(
+        texts.INVALID_NUMBER, reply_markup=text_input_keyboard(), parse_mode="HTML"
+    )
+
+
 async def _send_deferral_result(update: Update, context: ContextTypes.DEFAULT_TYPE, session, result_text: str) -> str:
     """Send a result that grants a deferral and offer info on how to register it."""
     session.step = "vidstrochka_result"
@@ -200,7 +211,7 @@ async def handle_vidstrochka_gate_2022(update: Update, context: ContextTypes.DEF
         return "vidstrochka_result"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_gate_2022())
         return "vidstrochka_gate_2022"
 
 
@@ -235,7 +246,7 @@ async def handle_vidstrochka_contract_status(update: Update, context: ContextTyp
         return "vidstrochka_result"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_contract_status())
         return "vidstrochka_contract_status"
 
 
@@ -270,7 +281,7 @@ async def handle_vidstrochka_contract_extension(update: Update, context: Context
         return "vidstrochka_contract_type"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_contract_extension())
         return "vidstrochka_contract_extension"
 
 
@@ -317,7 +328,7 @@ async def handle_vidstrochka_contract_type(update: Update, context: ContextTypes
         return "vidstrochka_age_at_signing"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_contract_type())
         return "vidstrochka_contract_type"
 
 
@@ -346,7 +357,7 @@ async def handle_vidstrochka_contract_term_768(update: Update, context: ContextT
         )
         return "vidstrochka_combat_periods"
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_contract_term_768())
         return "vidstrochka_contract_term_768"
 
 
@@ -381,7 +392,7 @@ async def handle_vidstrochka_age_at_signing(update: Update, context: ContextType
         return "vidstrochka_discharged_before_768"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_age_at_signing())
         return "vidstrochka_age_at_signing"
 
 
@@ -409,7 +420,7 @@ async def handle_vidstrochka_contract_term(update: Update, context: ContextTypes
         return "vidstrochka_discharged_before_768"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_contract_term())
         return "vidstrochka_contract_term"
 
 
@@ -446,7 +457,7 @@ async def handle_vidstrochka_discharged_before_768(update: Update, context: Cont
         return "vidstrochka_combat_periods"
 
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await _invalid_choice(update, vidstrochka_discharged_before_768())
         return "vidstrochka_discharged_before_768"
 
 
@@ -457,7 +468,7 @@ async def handle_vidstrochka_combat_periods(update: Update, context: ContextType
     text = update.message.text.strip()
 
     if not text.isdigit() or int(text) < 0:
-        await update.message.reply_text("❌ Вкажіть кількість у вигляді цифр (0, 1, 2…)")
+        await _invalid_number(update)
         return "vidstrochka_combat_periods"
 
     session.answers["combat_periods"] = int(text)
@@ -518,7 +529,7 @@ async def handle_vidstrochka_service_since_2022(update: Update, context: Context
     text = update.message.text.strip()
 
     if not text.isdigit() or int(text) < 0:
-        await update.message.reply_text("❌ Вкажіть кількість років у вигляді цифр (0, 1, 2…)")
+        await _invalid_number(update)
         return "vidstrochka_service_since_2022"
 
     session.answers["service_since_2022"] = int(text)
@@ -543,7 +554,7 @@ async def handle_vidstrochka_service_before_2022(update: Update, context: Contex
     text = update.message.text.strip()
 
     if not text.isdigit() or int(text) < 0:
-        await update.message.reply_text("❌ Вкажіть кількість років у вигляді цифр (0, 1, 2…)")
+        await _invalid_number(update)
         return "vidstrochka_service_before_2022"
 
     session.answers["service_before_2022"] = int(text)
@@ -594,5 +605,17 @@ async def handle_vidstrochka_result(update: Update, context: ContextTypes.DEFAUL
         from militarylaw_bot.bot.unified_conversation import _reset_to_menu
         return await _reset_to_menu(update, context)
 
-    # Otherwise just stay on result
+    # Anything else: explain that a button is expected and show this result's buttons again
+    answers = session.answers
+    if answers.get("has_deferral"):
+        keyboard = vidstrochka_registration_question()
+    elif (
+        answers.get("gate_2022") in ("before", "planning")
+        or answers.get("contract_status") == "special_period"
+        or answers.get("contract_extension") == "yes"
+    ):
+        keyboard = result_actions_with_contract()
+    else:
+        keyboard = result_actions()
+    await _invalid_choice(update, keyboard)
     return "vidstrochka_result"

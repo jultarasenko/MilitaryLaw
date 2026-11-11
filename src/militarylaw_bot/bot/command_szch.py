@@ -53,7 +53,9 @@ async def handle_szch_first_time(update: Update, context: ContextTypes.DEFAULT_T
     elif text == NOT_FIRST_TIME:
         parts = [texts.SZCH_NOT_FIRST_TIME_RESULT]
     else:
-        await update.message.reply_text("❌ Виберіть один з варіантів")
+        await update.message.reply_text(
+            texts.INVALID_CHOICE, reply_markup=szch_first_time(), parse_mode="HTML"
+        )
         return "szch_first_time"
 
     session.answers["first_time"] = text
