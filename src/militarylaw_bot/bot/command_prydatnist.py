@@ -202,11 +202,12 @@ async def _render_result(update: Update, answers: dict) -> None:
         text += f"<b>{_esc(point.conclusion)}</b>\n"
     else:
         text += "❓ Немає даних для цього діагнозу\n"
+    text += f"\n{texts.PRYDATNIST_DISCLAIMER}"
 
     requirements = db.get_requirements(number, letter)
     if requirements:
         units = {u.column_number: u.name for u in db.get_military_units()}
-        text += "\n<b>Обмеження за військовими спеціалізаціями (Додаток 3):</b>\n"
+        text += "\n\n<b>Обмеження за військовими спеціалізаціями (Додаток 3):</b>\n"
         for req in requirements:
             unit = _esc(units.get(req.military_unit_column, f"Колонка {req.military_unit_column}"))
             if req.requirement == "НП":
