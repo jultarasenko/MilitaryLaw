@@ -4,16 +4,36 @@ from __future__ import annotations
 
 from telegram import KeyboardButton, ReplyKeyboardMarkup
 
+# Shown in the message input field, so the user sees whether to tap or type
+PICK_BUTTON_PLACEHOLDER = "👇 Натисніть кнопку внизу"
+TYPE_NUMBER_PLACEHOLDER = "⌨️ Напишіть число"
+
+
+def build_grid_keyboard(
+    options: list[str], per_row: int, placeholder: str = PICK_BUTTON_PLACEHOLDER
+) -> ReplyKeyboardMarkup:
+    """Reply keyboard with options laid out per_row in a row, plus navigation buttons.
+
+    The keyboard stays open (is_persistent) and the input field placeholder says
+    whether to tap a button or type.
+    """
+    buttons = [
+        [KeyboardButton(opt) for opt in options[i:i + per_row]]
+        for i in range(0, len(options), per_row)
+    ]
+    buttons.append([KeyboardButton("← Назад"), KeyboardButton("↑ Меню")])
+    return ReplyKeyboardMarkup(
+        buttons,
+        one_time_keyboard=False,
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder=placeholder,
+    )
+
 
 def build_options_keyboard(options: list[str]) -> ReplyKeyboardMarkup:
-    """Build reply keyboard with options and navigation buttons."""
-    buttons = [[KeyboardButton(opt)] for opt in options]
-    # Add navigation buttons at the bottom
-    buttons.append([
-        KeyboardButton("← Назад"),
-        KeyboardButton("↑ Меню")
-    ])
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True)
+    """Build reply keyboard with one option per row and navigation buttons."""
+    return build_grid_keyboard(options, per_row=1)
 
 
 VIDSTROCHKA_BUTTON = "Відстрочка після звільнення у зв'язку із закінченням контракту"
@@ -31,7 +51,13 @@ def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
         [KeyboardButton("СЗЧ")],
         # [KeyboardButton("Переведення")],  # temporarily hidden
     ]
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        buttons,
+        one_time_keyboard=False,
+        resize_keyboard=True,
+        is_persistent=True,
+        input_field_placeholder=PICK_BUTTON_PLACEHOLDER,
+    )
 
 
 # Vidstrochka keyboards
@@ -95,28 +121,14 @@ def vidstrochka_discharged_before_768() -> ReplyKeyboardMarkup:
     ])
 
 
-def vidstrochka_combat_periods() -> ReplyKeyboardMarkup:
-    """Keyboard for entering number of combat periods (text input, back/menu only)."""
-    buttons = [
-        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
-    ]
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
-
-
 def text_input_keyboard() -> ReplyKeyboardMarkup:
-    """Keyboard for text input (back/menu only, no option buttons)."""
-    buttons = [
-        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
-    ]
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+    """Keyboard for typing a number (back/menu only, no option buttons)."""
+    return build_grid_keyboard([], per_row=1, placeholder=TYPE_NUMBER_PLACEHOLDER)
 
 
 def result_actions() -> ReplyKeyboardMarkup:
     """Reply keyboard for result navigation (back and menu only)."""
-    buttons = [
-        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
-    ]
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+    return build_grid_keyboard([], per_row=1)
 
 
 def vidstrochka_registration_question() -> ReplyKeyboardMarkup:
@@ -125,43 +137,12 @@ def vidstrochka_registration_question() -> ReplyKeyboardMarkup:
 
 def result_actions_with_contract() -> ReplyKeyboardMarkup:
     """Reply keyboard for planning contract result with option to select contract."""
-    buttons = [
-        [KeyboardButton("📋 Обрати контракт")],
-        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
-    ]
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
+    return build_grid_keyboard(["📋 Обрати контракт"], per_row=1)
 
 
 # Szch keyboards
 def szch_first_time() -> ReplyKeyboardMarkup:
     return build_options_keyboard(["Так, вперше", "Ні, не вперше"])
-
-
-# Prydatnist keyboards
-def prydatnist_search_method() -> ReplyKeyboardMarkup:
-    return build_options_keyboard([
-        "🔍 Пошук по ключовому слову",
-        "📚 Перегляд груп хвороб",
-    ])
-
-
-def build_grid_keyboard(options: list[str], per_row: int) -> ReplyKeyboardMarkup:
-    """Reply keyboard with options laid out per_row in a row, plus navigation buttons."""
-    buttons = [
-        [KeyboardButton(opt) for opt in options[i:i + per_row]]
-        for i in range(0, len(options), per_row)
-    ]
-    buttons.append([KeyboardButton("← Назад"), KeyboardButton("↑ Меню")])
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
-
-
-def prydatnist_result_actions() -> ReplyKeyboardMarkup:
-    """Reply keyboard for result with option to start new search."""
-    buttons = [
-        [KeyboardButton("🔍 Новий пошук")],
-        [KeyboardButton("← Назад"), KeyboardButton("↑ Меню")]
-    ]
-    return ReplyKeyboardMarkup(buttons, one_time_keyboard=False, resize_keyboard=True)
 
 
 # Transfer keyboards
