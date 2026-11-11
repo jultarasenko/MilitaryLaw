@@ -430,5 +430,5 @@ async def handle_prydatnist_step(update: Update, context: ContextTypes.DEFAULT_T
 async def handle_legacy_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Answer taps on inline buttons left in chats by the old prydatnist version."""
     await update.callback_query.answer(
-        "Ця кнопка застаріла. Відкрийте «Придатність» з меню.", show_alert=True
+        "Ця кнопка застаріла. Відкрийте «ВЛК» з меню.", show_alert=True
     )

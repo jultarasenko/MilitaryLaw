@@ -19,13 +19,15 @@ def build_options_keyboard(options: list[str]) -> ReplyKeyboardMarkup:
 VIDSTROCHKA_BUTTON = "Відстрочка після звільнення у зв'язку із закінченням контракту"
 # Earlier labels that may still be on users' persistent menu keyboards
 VIDSTROCHKA_LEGACY_BUTTONS = ("Відстрочка", "Відстрочка після звільнення по закінченню контракту")
+PRYDATNIST_BUTTON = "ВЛК"
+PRYDATNIST_LEGACY_BUTTONS = ("Придатність",)
 
 
 def build_main_menu_keyboard() -> ReplyKeyboardMarkup:
     """Build main menu keyboard for command selection."""
     buttons = [
         [KeyboardButton(VIDSTROCHKA_BUTTON)],
-        [KeyboardButton("Придатність")],
+        [KeyboardButton(PRYDATNIST_BUTTON)],
         [KeyboardButton("СЗЧ")],
         # [KeyboardButton("Переведення")],  # temporarily hidden
     ]

@@ -20,6 +20,8 @@ from militarylaw_bot.bot.handlers import track_stats
 from militarylaw_bot.db.statistics import TRACKED_COMMANDS
 from militarylaw_bot.bot.global_session import CommandType, get_session
 from militarylaw_bot.bot.unified_keyboards import (
+    PRYDATNIST_BUTTON,
+    PRYDATNIST_LEGACY_BUTTONS,
     VIDSTROCHKA_BUTTON,
     VIDSTROCHKA_LEGACY_BUTTONS,
     build_main_menu_keyboard,
@@ -66,7 +68,6 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         session = get_session(chat_id)
         text = update.message.text.strip() if update.message else None
         logger.info(f"handle_menu_selection called: chat_id={chat_id}, text='{text}', len={len(text) if text else 0}, session.step={session.step}")
-        logger.info(f"Text == 'Придатність': {text == 'Придатність'}")
     except Exception as e:
         logger.error(f"Error in handle_menu_selection start: {e}", exc_info=True)
         raise
@@ -106,7 +107,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
     #     )
     #     return "transfer_formation"
 
-    elif text == "Придатність":
+    elif text == PRYDATNIST_BUTTON or text in PRYDATNIST_LEGACY_BUTTONS:
         return await start_prydatnist(update, context)
 
     else:
