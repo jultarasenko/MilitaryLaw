@@ -44,7 +44,8 @@ from militarylaw_bot.bot.command_vidstrochka import (
 from militarylaw_bot.bot.command_szch import (
     handle_szch_first_time,
     handle_szch_result,
-    show_szch_first_time,
+    handle_szch_self_placement,
+    render_szch_step,
     start_szch,
 )
 from militarylaw_bot.bot.command_transfer import (
@@ -63,14 +64,10 @@ _TEXT_INPUT = filters.TEXT & ~filters.COMMAND
 
 async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle main menu selection - route to appropriate command."""
-    try:
-        chat_id = update.effective_chat.id
-        session = get_session(chat_id)
-        text = update.message.text.strip() if update.message else None
-        logger.info(f"handle_menu_selection called: chat_id={chat_id}, text='{text}', len={len(text) if text else 0}, session.step={session.step}")
-    except Exception as e:
-        logger.error(f"Error in handle_menu_selection start: {e}", exc_info=True)
-        raise
+    # Logs never contain chat IDs or message texts: in ВЛК the texts are diagnoses
+    chat_id = update.effective_chat.id
+    session = get_session(chat_id)
+    text = update.message.text.strip() if update.message else None
 
     if text == VIDSTROCHKA_BUTTON or text in VIDSTROCHKA_LEGACY_BUTTONS:
         session.answers.clear()
@@ -111,7 +108,7 @@ async def handle_menu_selection(update: Update, context: ContextTypes.DEFAULT_TY
         return await start_prydatnist(update, context)
 
     else:
-        logger.info(f"Unknown menu option, returning 'menu'")
+        logger.info("Unknown menu option, returning 'menu'")
         await update.message.reply_text(
             texts.INVALID_MENU_CHOICE,
             reply_markup=build_main_menu_keyboard(),
@@ -129,11 +126,10 @@ async def _universal_back_handler(
     text = update.message.text.strip()
 
     if text == "← Назад":
-        logger.info(f"Back button pressed: chat_id={chat_id}, current_step={session.step}, history_len={len(session.history)}")
+        logger.debug(f"Back from step {session.step}")
         if session.pop_history():
             step = session.step
             command = session.current_command
-            logger.info(f"After pop_history: step={step}, command={command}")
 
             if step == "menu":
                 return await _reset_to_menu(update, context)
@@ -147,7 +143,7 @@ async def _universal_back_handler(
             elif command == CommandType.PRYDATNIST:
                 return await render_prydatnist_step(update, context, session)
 
-        logger.info(f"No history to pop, returning current step: {session.step}")
+        logger.debug(f"No history to go back to from step {session.step}")
         return session.step
 
     if text == "↑ Меню":
@@ -261,9 +257,8 @@ async def _dispatch_szch(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session
 ) -> str:
     """Re-render SZCH step from history - just show the screen, don't process input."""
-    # The only screen before the result is the first question
-    session.step = "szch_first_time"
-    return await show_szch_first_time(update, context)
+    # Results are never pushed to history, so the restored step is always a question
+    return await render_szch_step(update, context, session.step)
 
 
 async def _dispatch_transfer(
@@ -425,14 +420,8 @@ async def _check_navigation_and_dispatch(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
     """Check for navigation buttons and re-dispatch if needed."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-    text = update.message.text.strip() if update.message else ""
-    logger.info(f"_check_navigation_and_dispatch: chat_id={chat_id}, text='{text}', step={session.step}")
-
     # Check navigation first
     nav_result = await _universal_back_handler(update, context)
-    logger.info(f"_universal_back_handler returned: {nav_result}")
     if nav_result is not None:
         return nav_result
 
@@ -559,6 +548,15 @@ async def _szch_first_time_wrapper(
     return await handle_szch_first_time(update, context)
 
 
+async def _szch_self_placement_wrapper(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    nav = await _check_navigation_and_dispatch(update, context)
+    if nav is not None:
+        return nav
+    return await handle_szch_self_placement(update, context)
+
+
 async def _szch_result_wrapper(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> str:
@@ -591,19 +589,13 @@ async def _transfer_wrapper(
 
 async def _start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle /start command - entry point to conversation."""
-    chat_id = update.effective_chat.id
-    logger.info(f"_start_handler called: chat_id={chat_id}")
     await handlers.start(update, context)
-    logger.info(f"_start_handler returning 'menu' state")
     return "menu"
 
 
 async def _menu_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Wrapper for menu state handler."""
-    text = update.message.text.strip() if update.message else ""
-    logger.info(f"_menu_wrapper called: text='{text}'")
     nav = await _check_navigation_and_dispatch(update, context)
-    logger.info(f"_menu_wrapper: nav={nav}")
     if nav is not None:
         return nav
     return await handle_menu_selection(update, context)
@@ -611,9 +603,6 @@ async def _menu_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
 
 async def _enter_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Enter menu state from entry point."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
-    logger.info(f"Entering menu state from entry_points: chat_id={chat_id}")
     return await _menu_wrapper(update, context)
 
 
@@ -687,6 +676,7 @@ def build_unified_conversation() -> ConversationHandler:
             "vidstrochka_result": [MessageHandler(_TEXT_INPUT, _vidstrochka_result_wrapper)],
             # SZCH states (integrated in single tree)
             "szch_first_time": [MessageHandler(_TEXT_INPUT, _szch_first_time_wrapper)],
+            "szch_self_placement": [MessageHandler(_TEXT_INPUT, _szch_self_placement_wrapper)],
             "szch_result": [MessageHandler(_TEXT_INPUT, _szch_result_wrapper)],
             # Transfer states (integrated in single tree)
             "transfer_formation": [MessageHandler(_TEXT_INPUT, _transfer_wrapper)],

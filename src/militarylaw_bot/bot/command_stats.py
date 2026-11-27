@@ -79,11 +79,10 @@ def _build_summary(tracker: StatisticsTracker) -> str:
 async def handle_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /stats command - admin only usage statistics."""
     settings = load_settings()
-    logger.info(f"User {update.message.chat_id} requested /stats")
 
     # Check if user is admin
     if update.message.chat_id not in settings.admin_chat_ids:
-        logger.warning(f"Non-admin {update.message.chat_id} tried to access /stats")
+        logger.warning("Non-admin tried to access /stats")
         await update.message.reply_text("⛔ Ця команда доступна тільки адміністратору")
         return
 
@@ -91,5 +90,5 @@ async def handle_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("⚠️ Статистика недоступна")
         return
 
-    logger.info(f"Sending stats to admin {update.message.chat_id}")
+    logger.info("Sending stats to an admin")
     await update.message.reply_text(_build_summary(_stats_tracker), parse_mode=ParseMode.HTML)

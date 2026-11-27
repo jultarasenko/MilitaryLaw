@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 from pathlib import Path
 
 from telegram import InputMediaPhoto, ReplyKeyboardMarkup, Update
@@ -19,13 +20,20 @@ from militarylaw_bot.bot.global_session import CommandType, GlobalSession, get_s
 from militarylaw_bot.bot.handlers import track_stats
 from militarylaw_bot.bot.unified_keyboards import build_grid_keyboard
 from militarylaw_bot.bot.utils import get_db_path, get_tables_dir
-from militarylaw_bot.domain.suitability import ArticlePoint, SuitabilityDB
+from militarylaw_bot.domain.suitability import (
+    ArticlePoint,
+    SuitabilityDB,
+    query_terms,
+    word_matches_query,
+)
 
 logger = logging.getLogger(__name__)
 
 KEYWORD_BUTTON = "🔍 Пошук по ключовому слову"
 BROWSE_BUTTON = "📚 Перегляд груп хвороб"
 NEXT_BUTTON = "➡️ Далі"
+# On a point the search opened directly
+OTHER_POINTS_BUTTON = "📄 Інші пункти статті"
 NEW_SEARCH_BUTTON = "🔍 Новий пошук"
 ARTICLE_PREFIX = "Стаття "
 KEYWORD_PLACEHOLDER = "⌨️ Напишіть назву хвороби"
@@ -58,26 +66,171 @@ def _esc(text: str | None) -> str:
     return html.escape(text or "", quote=False)
 
 
-def _split_message(text: str) -> list[str]:
-    """Split text into Telegram-sized chunks on line boundaries."""
+_WORD = re.compile(r"[\w']+")
+
+
+def _hl(text: str | None, keyword: str | None) -> str:
+    """Escape text and underline the words that match the search query, if there is one."""
+    escaped = _esc(text)
+    if not keyword:
+        return escaped
+    terms = query_terms(keyword)
+    return _WORD.sub(
+        lambda m: f"<u>{m.group(0)}</u>" if word_matches_query(m.group(0), terms) else m.group(0),
+        escaped,
+    )
+
+
+def _synonyms_line(keyword: str | None, article_numbers: list[str]) -> str:
+    """"Шукали також за схожими словами: …" (those found in the shown articles) or ""."""
+    synonyms = _get_db().found_synonyms(keyword, article_numbers) if keyword else []
+    if not synonyms:
+        return ""
+    return texts.PRYDATNIST_SYNONYMS_LINE.format(words=", ".join(_esc(s) for s in synonyms))
+
+
+def _opened_by_search(answers: dict) -> bool:
+    """The search found only this article and opened it, so the user saw no results list."""
+    return answers.get("search_articles") == [answers.get("article_number")]
+
+
+def _jump_letter(answers: dict, number: str) -> str | None:
+    """The point to open right away when the article is opened from the search: the one
+    point the query singles out, if any. The results list shows it on the button
+    ("Стаття 20, пункт а"), so the user knows where the button leads.
+    """
+    keyword = answers.get("search_keyword")
+    if not keyword:
+        return None
+    letters = _get_db().best_points(keyword, number)
+    return letters[0] if len(letters) == 1 else None
+
+
+def _points_label(letters: list[str]) -> tuple[str, str]:
+    """("пункт а", "в пункті а") or ("пункти а, б", "в пунктах а, б")."""
+    joined = ", ".join(letters)
+    if len(letters) == 1:
+        return f"пункт {joined}", f"в пункті {joined}"
+    return f"пункти {joined}", f"в пунктах {joined}"
+
+
+def _quoted_words(words: list[str]) -> dict[str, str]:
+    """{"words": "«астми», «астматичного»", "verb": "згадуються"} for the mention hints."""
+    shown = words[:3]
+    return {
+        "words": ", ".join(f"«{_esc(w)}»" for w in shown),
+        "verb": "згадується" if len(shown) == 1 else "згадуються",
+    }
+
+
+def _search_hint(keyword: str, number: str, in_results: bool) -> str:
+    """Where the query was found in the article, or "" if it does not single out points."""
+    db = _get_db()
+    letters = db.best_points(keyword, number)
+    if not letters:
+        # The query does not tell the points apart (all match, or the article has one point),
+        # or it is only in the explanation of the whole article (e.g. "раку" in article 54).
+        # Say where it is only if the article is not about this disease.
+        if db.article_names_disease(keyword, number):
+            return ""
+        template = (
+            texts.PRYDATNIST_RESULTS_MENTION_HINT if in_results
+            else texts.PRYDATNIST_SEARCH_MENTION_HINT
+        )
+        point_letters = [p.point_letter for p in _letter_points(number)]
+        with_words = [
+            letter for letter in point_letters if db.mentioned_words(keyword, number, [letter])
+        ]
+        if with_words:
+            words = db.mentioned_words(keyword, number, with_words)
+            return template.format(**_quoted_words(words), where=_points_label(with_words)[1])
+        words = db.explanation_mentioned_words(keyword, number)
+        if not words:
+            return ""
+        return template.format(**_quoted_words(words), where="в поясненні до статті")
+    points, where = _points_label(letters)
+    if db.article_names_disease(keyword, number):
+        template = (
+            texts.PRYDATNIST_RESULTS_POINTS_HINT if in_results
+            else texts.PRYDATNIST_SEARCH_POINTS_HINT
+        )
+        return template.format(keyword=_esc(keyword), points=points)
+    # The article is not about this disease: say exactly which word was found there
+    with_words = [letter for letter in letters if db.mentioned_words(keyword, number, [letter])]
+    words = db.mentioned_words(keyword, number, with_words)
+    if words:
+        _, where = _points_label(with_words)
+        template = (
+            texts.PRYDATNIST_RESULTS_MENTION_HINT if in_results
+            else texts.PRYDATNIST_SEARCH_MENTION_HINT
+        )
+        return template.format(**_quoted_words(words), where=where)
+    template = (
+        texts.PRYDATNIST_RESULTS_PARTIAL_HINT if in_results
+        else texts.PRYDATNIST_SEARCH_PARTIAL_HINT
+    )
+    return template.format(where=where)
+
+
+_HTML_TAG = re.compile(r"<(/?)(b|i|u|s|a|code|pre)\b[^>]*>")
+
+
+def _balance_tags(chunks: list[str]) -> list[str]:
+    """Close tags left open at the end of a chunk and reopen them in the next one.
+
+    Telegram rejects a message with an unclosed tag, so a split inside <i>…</i>
+    would drop that part of the screen together with its keyboard.
+    """
+    balanced = []
+    carried: list[str] = []  # opening tags still open from previous chunks
+    for chunk in chunks:
+        text = "".join(carried) + chunk
+        stack = list(carried)
+        for match in _HTML_TAG.finditer(chunk):
+            if match.group(1):
+                if stack:
+                    stack.pop()
+            else:
+                stack.append(match.group(0))
+        closing = "".join(f"</{_HTML_TAG.match(tag).group(2)}>" for tag in reversed(stack))
+        balanced.append(text + closing)
+        carried = stack
+    return balanced
+
+
+def _pack(pieces: list[str], separator: str) -> list[str]:
+    """Join pieces with separator into chunks no longer than the message limit."""
     chunks: list[str] = []
     current = ""
-    for line in text.split("\n"):
-        while len(line) > _MAX_MESSAGE_LENGTH:
-            if current:
-                chunks.append(current)
-                current = ""
-            chunks.append(line[:_MAX_MESSAGE_LENGTH])
-            line = line[_MAX_MESSAGE_LENGTH:]
-        candidate = f"{current}\n{line}" if current else line
-        if len(candidate) > _MAX_MESSAGE_LENGTH:
+    for piece in pieces:
+        candidate = f"{current}{separator}{piece}" if current else piece
+        if current and len(candidate) > _MAX_MESSAGE_LENGTH:
             chunks.append(current)
-            current = line
+            current = piece
         else:
             current = candidate
     if current:
         chunks.append(current)
     return chunks
+
+
+def _split_message(text: str) -> list[str]:
+    """Split text into Telegram-sized chunks, keeping HTML tags balanced.
+
+    Splits between paragraphs where possible, so a block like the closing
+    "what to do next" prompt stays in one message; falls back to lines,
+    then to a hard cut for a single overlong line.
+    """
+    pieces: list[str] = []
+    for paragraph in _pack(text.split("\n\n"), "\n\n"):
+        if len(paragraph) <= _MAX_MESSAGE_LENGTH:
+            pieces.append(paragraph)
+            continue
+        for block in _pack(paragraph.split("\n"), "\n"):
+            pieces.extend(
+                block[i:i + _MAX_MESSAGE_LENGTH] for i in range(0, len(block), _MAX_MESSAGE_LENGTH)
+            )
+    return _balance_tags(pieces)
 
 
 async def _reply(update: Update, text: str, keyboard) -> None:
@@ -140,14 +293,27 @@ def _screen_search_results(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
     numbers = answers["search_articles"]
     text = (
         f"🔍 <b>За запитом «{_esc(answers['search_keyword'])}» "
-        f"знайдено статей: {len(numbers)}</b>\n\n"
+        f"знайдено статей: {len(numbers)}</b>\n"
     )
+    synonyms = _synonyms_line(answers["search_keyword"], numbers)
+    if synonyms:
+        text += synonyms + "\n"
+    text += "\n"
+    keyword = answers["search_keyword"]
     for number in numbers:
         article = db.get_article(number)
         keywords = article.keywords if article else ""
-        text += f"<b>Стаття {number}</b> - {_esc(keywords) or 'Без опису'}\n\n"
+        text += f"<b>Стаття {number}</b> - {_hl(keywords, keyword) or 'Без опису'}\n"
+        hint = _search_hint(keyword, number, in_results=True)
+        if hint:
+            text += hint + "\n"
+        text += "\n"
     text += texts.PRYDATNIST_SEARCH_RESULTS_FOOTER
-    labels = [f"{ARTICLE_PREFIX}{n}" for n in numbers]
+    # A button says the point too when it opens that point right away
+    labels = []
+    for number in numbers:
+        letter = _jump_letter(answers, number)
+        labels.append(f"{ARTICLE_PREFIX}{number}" + (f", пункт {letter}" if letter else ""))
     return text, build_grid_keyboard(labels, per_row=2)
 
 
@@ -183,13 +349,21 @@ def _screen_article(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
     appendix2 = _get_db().get_appendix2_article(number)
     points = _letter_points(number)
 
-    text = f"<b>{_esc(_article_title(number))}</b>\n\n"
+    keyword = answers.get("search_keyword")
+    text = f"<b>{_hl(_article_title(number), keyword)}</b>\n\n"
+    if keyword and _opened_by_search(answers):
+        synonyms = _synonyms_line(keyword, [number])
+        if synonyms:
+            text += synonyms + "\n\n"
     if appendix2 and appendix2.details:
-        text += f"<b>Пояснення:</b>\n{_esc(appendix2.details)}\n\n"
+        text += f"<b>Пояснення:</b>\n{_hl(appendix2.details, keyword)}\n\n"
     if points:
         text += "<b>Пункти статті:</b>\n"
         for point in points:
-            text += f"\n<b>{point.point_letter})</b> {_esc(point.description)}\n"
+            text += f"\n<b>{point.point_letter})</b> {_hl(point.description, keyword)}\n"
+        hint = _search_hint(keyword, number, in_results=False) if keyword else ""
+        if hint:
+            text += f"\n{hint}\n"
         text += f"\n{texts.PRYDATNIST_CHOOSE_POINT}"
         if any(_point_explanation(number, p.point_letter) for p in points):
             text += f"\n\n{texts.PRYDATNIST_BROWSE_POINTS_HINT}"
@@ -205,13 +379,49 @@ def _screen_point(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
     point = _find_point(number, letter)
     appendix2 = _get_db().get_appendix2_point(number, letter)
 
-    text = f"<b>Стаття {number}, пункт {letter}</b>\n\n"
+    text = ""
+    if answers.get("search_hit") == letter:
+        # Opened straight from the search: say why this point was chosen
+        keyword = answers["search_keyword"]
+        db = _get_db()
+        words = [] if db.article_names_disease(keyword, number) else (
+            db.mentioned_words(keyword, number, [letter])
+        )
+        if words:
+            # The article is not about this disease, it is only mentioned in the point
+            text += texts.PRYDATNIST_SEARCH_HIT_MENTION.format(
+                **_quoted_words(words), article=number, letter=letter
+            ) + "\n"
+        else:
+            text += texts.PRYDATNIST_SEARCH_HIT.format(
+                keyword=_esc(keyword), article=number, letter=letter
+            ) + "\n"
+        if _opened_by_search(answers):
+            synonyms = _synonyms_line(answers["search_keyword"], [number])
+            if synonyms:
+                text += synonyms + "\n"
+        text += "\n"
+    text += f"<b>Стаття {number}, пункт {letter}</b>\n\n"
+    keyword = answers.get("search_keyword")
     if point and point.description:
-        text += f"<b>Опис:</b>\n{_esc(point.description)}\n\n"
+        text += f"<b>Опис:</b>\n{_hl(point.description, keyword)}\n\n"
     if appendix2 and appendix2.details:
-        text += f"<b>Пояснення:</b>\n{_esc(appendix2.details)}\n\n"
-    text += texts.PRYDATNIST_CONFIRM_POINT
-    return text, build_grid_keyboard([NEXT_BUTTON], per_row=1)
+        text += f"<b>Пояснення:</b>\n{_hl(appendix2.details, keyword)}\n\n"
+        question = texts.PRYDATNIST_CONFIRM_POINT_QUESTION
+    else:
+        question = texts.PRYDATNIST_CONFIRM_DESCRIPTION_QUESTION
+
+    if answers.get("search_hit") != letter:
+        text += question + texts.PRYDATNIST_CONFIRM_POINT_ANSWERS
+        return text, build_grid_keyboard([NEXT_BUTTON], per_row=1)
+    # Opened straight from the search, so the article screen was skipped: offer it as a button.
+    # "Назад" returns to the screen the user came from (the results list or the query).
+    back_to = (
+        "щоб повернутися до результатів пошуку" if len(answers.get("search_articles") or []) > 1
+        else "щоб змінити запит"
+    )
+    text += question + texts.PRYDATNIST_CONFIRM_SEARCH_HIT_ANSWERS.format(back_to=back_to)
+    return text, build_grid_keyboard([NEXT_BUTTON, OTHER_POINTS_BUTTON], per_row=1)
 
 
 def _screen_result(answers: dict) -> tuple[str, ReplyKeyboardMarkup]:
@@ -292,8 +502,8 @@ async def _send_tables(update: Update, table_numbers: str | None) -> None:
 
 
 def _typed_article_number(text: str) -> str:
-    """Article number from the "Стаття 5" button or from a typed "5"."""
-    return text.removeprefix(ARTICLE_PREFIX).strip()
+    """Article number from a "Стаття 5" / "Стаття 5, пункт б" button or from a typed "5"."""
+    return text.removeprefix(ARTICLE_PREFIX).split(",")[0].strip()
 
 
 def _latin_roman(text: str) -> str:
@@ -321,10 +531,15 @@ async def _move_to(
     **answers,
 ) -> str:
     """Remember the current screen for back navigation, then show the next one."""
+    _advance(session, step, **answers)
+    return await render_prydatnist_step(update, context, session)
+
+
+def _advance(session: GlobalSession, step: str, **answers) -> None:
+    """Remember the current screen for back navigation and switch to step without showing it."""
     session.push_history()
     session.answers = {**session.answers, **answers}
     session.step = step
-    return await render_prydatnist_step(update, context, session)
 
 
 async def _invalid_choice(update: Update, session: GlobalSession) -> str:
@@ -339,11 +554,28 @@ async def _invalid_choice(update: Update, session: GlobalSession) -> str:
 async def _open_article(
     update: Update, context: ContextTypes.DEFAULT_TYPE, session: GlobalSession, number: str
 ) -> str:
+    """Show the article; if the search query points to one point, go straight to it.
+
+    The point screen still asks whether the explanation fits and offers the other points
+    of the article and the other search results.
+    """
     # Tables go first, so the screen with "what to do next" ends up at the bottom of the chat
-    appendix2 = _get_db().get_appendix2_article(number)
+    db = _get_db()
+    appendix2 = db.get_appendix2_article(number)
     await _send_tables(update, appendix2.table_number if appendix2 else None)
+
+    letter = _jump_letter(session.answers, number)
+    if letter is None:
+        return await _move_to(
+            update, context, session, "prydatnist_article", article_number=number, point_letter=None
+        )
+    # The article screen is skipped and not put into history: "Назад" from the point goes
+    # back to what the user actually saw before it
+    point_appendix2 = db.get_appendix2_point(number, letter)
+    await _send_tables(update, point_appendix2.table_number if point_appendix2 else None)
     return await _move_to(
-        update, context, session, "prydatnist_article", article_number=number, point_letter=None
+        update, context, session, "prydatnist_point",
+        article_number=number, point_letter=letter, search_hit=letter,
     )
 
 
@@ -365,14 +597,13 @@ async def _on_keyword_input(update, context, session, text: str) -> str:
             reply_markup=keyboard,
         )
         return session.step
-    return await _move_to(
-        update,
-        context,
-        session,
-        "prydatnist_search_results",
-        search_keyword=text,
-        search_articles=[a.number for a in articles],
-    )
+    found = {"search_keyword": text, "search_articles": [a.number for a in articles]}
+    if len(articles) == 1:
+        # Nothing to choose from: skip the results list and open the article
+        session.answers = {**session.answers, **found}
+        return await _open_article(update, context, session, articles[0].number)
+
+    return await _move_to(update, context, session, "prydatnist_search_results", **found)
 
 
 async def _on_search_results(update, context, session, text: str) -> str:
@@ -427,6 +658,11 @@ async def _on_article(update, context, session, text: str) -> str:
 async def _on_point(update, context, session, text: str) -> str:
     if text == NEXT_BUTTON:
         return await _move_to(update, context, session, "prydatnist_result")
+    if text == OTHER_POINTS_BUTTON and session.answers.get("search_hit"):
+        # A step forward to the article; "Назад" from there returns to this point
+        return await _move_to(
+            update, context, session, "prydatnist_article", point_letter=None, search_hit=None
+        )
     return await _invalid_choice(update, session)
 
 

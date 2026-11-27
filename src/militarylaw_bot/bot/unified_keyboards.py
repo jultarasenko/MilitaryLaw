@@ -145,6 +145,10 @@ def szch_first_time() -> ReplyKeyboardMarkup:
     return build_options_keyboard(["Так, вперше", "Ні, не вперше"])
 
 
+def szch_self_placement() -> ReplyKeyboardMarkup:
+    return build_options_keyboard(["Так", "Ні"])
+
+
 # Transfer keyboards
 def transfer_formation() -> ReplyKeyboardMarkup:
     return build_options_keyboard(["ЗСУ", "НГУ", "ДПСУ", "ДССТ"])
