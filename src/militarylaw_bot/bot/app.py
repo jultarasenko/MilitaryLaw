@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 
 from telegram import Update
-from telegram.ext import Application, PicklePersistence
+from telegram.error import NetworkError
+from telegram.ext import Application, ContextTypes, PicklePersistence
 
-from militarylaw_bot.bot import handlers
+from militarylaw_bot.bot import command_stats, handlers, texts
 from militarylaw_bot.bot.commands import register_commands
-from militarylaw_bot.bot import command_stats
 from militarylaw_bot.bot.middleware import UserTrackingHandler
+from militarylaw_bot.bot.unified_keyboards import result_actions
 from militarylaw_bot.bot.utils import get_data_path
 from militarylaw_bot.config import load_settings
 from militarylaw_bot.db import StatisticsTracker
@@ -23,6 +24,22 @@ logger = logging.getLogger(__name__)
 
 # Reduce noise from httpx
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Log the error and, if a user was waiting for a reply, give them a way to carry on."""
+    if isinstance(context.error, NetworkError):
+        # Telegram polling hiccups (Bad Gateway etc.): the bot retries by itself
+        logger.warning(f"Network error: {context.error}")
+        return
+    logger.error("Error while handling an update", exc_info=context.error)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                texts.SOMETHING_WENT_WRONG, reply_markup=result_actions(), parse_mode="HTML"
+            )
+        except Exception:
+            logger.exception("Could not send the error message to the user")
 
 
 def build_application() -> Application:
@@ -53,6 +70,7 @@ def build_application() -> Application:
     # Register all commands and handlers
     logger.info("About to register commands...")
     register_commands(application)
+    application.add_error_handler(handle_error)
     logger.info("✅ Commands registered")
 
     return application
